@@ -1,0 +1,69 @@
+name: V12 bilingual French English Piper CPU integration (no paid APIs)
+on:
+  push:
+    branches: [feat/v12-bilingual-fr-en-voices]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  bilingual-voices:
+    runs-on: ubuntu-latest
+    timeout-minutes: 23
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Piper and open-source FFmpeg
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
+          python -m pip install piper-tts
+      - name: Download the two explicitly selected public Piper test voice models
+        run: |
+          python -m piper.download_voices fr_FR-siwis-medium en_US-lessac-medium --data-dir "$RUNNER_TEMP/ugc-voices"
+          test -s "$RUNNER_TEMP/ugc-voices/fr_FR-siwis-medium.onnx"
+          test -s "$RUNNER_TEMP/ugc-voices/fr_FR-siwis-medium.onnx.json"
+          test -s "$RUNNER_TEMP/ugc-voices/en_US-lessac-medium.onnx"
+          test -s "$RUNNER_TEMP/ugc-voices/en_US-lessac-medium.onnx.json"
+      - name: Python/JS syntax and authentic bilingual synthesis through studio API
+        env:
+          UGC_TEST_PIPER_MODEL: ${{ runner.temp }}/ugc-voices/fr_FR-siwis-medium.onnx
+          UGC_TEST_PIPER_MODEL_EN: ${{ runner.temp }}/ugc-voices/en_US-lessac-medium.onnx
+        run: |
+          python -m compileall -q offline_presenter.py voice_catalog.py studio_web.py functional_checks_v12.py
+          node --check studio_web/studio.js
+          python functional_checks_v12.py
+          python functional_checks_v11.py
+          python functional_checks_v11_web.py
+          python functional_checks_v9.py
+          python make_synthetic_demo.py
+          python functional_checks_v8.py
+          python functional_checks_v10.py
+      - name: Generate human-review bilingual samples without paid inference
+        env:
+          UGC_TEST_PIPER_MODEL: ${{ runner.temp }}/ugc-voices/fr_FR-siwis-medium.onnx
+          UGC_TEST_PIPER_MODEL_EN: ${{ runner.temp }}/ugc-voices/en_US-lessac-medium.onnx
+        run: |
+          python offline_presenter.py voice --voice-model "$UGC_TEST_PIPER_MODEL" \
+            --voice-license-ref "https://huggingface.co/rhasspy/piper-voices/blob/main/fr/fr_FR/siwis/medium/MODEL_CARD" \
+            --confirm-voice-rights --text "Bonjour. Cette voix française est produite localement sans API payante." \
+            --output "$RUNNER_TEMP/ugc_french.wav"
+          python offline_presenter.py voice --voice-model "$UGC_TEST_PIPER_MODEL_EN" \
+            --voice-license-ref "https://huggingface.co/rhasspy/piper-voices/blob/main/en/en_US/lessac/medium/MODEL_CARD" \
+            --confirm-voice-rights --text "Hello. This English voice is generated locally with no paid API." \
+            --output "$RUNNER_TEMP/ugc_english.wav"
+          ffprobe -v error -show_entries stream=codec_name,sample_rate -of json "$RUNNER_TEMP/ugc_french.wav"
+          ffprobe -v error -show_entries stream=codec_name,sample_rate -of json "$RUNNER_TEMP/ugc_english.wav"
+          test -s "$RUNNER_TEMP/ugc_french.voice.json"
+          test -s "$RUNNER_TEMP/ugc_english.voice.json"
+      - name: Save voice samples for manual listening (3-day retention)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ugc-v12-french-english-voices
+          path: |
+            ${{ runner.temp }}/ugc_french.wav
+            ${{ runner.temp }}/ugc_french.voice.json
+            ${{ runner.temp }}/ugc_english.wav
+            ${{ runner.temp }}/ugc_english.voice.json
+          retention-days: 3
