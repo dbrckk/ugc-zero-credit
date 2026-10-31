@@ -124,11 +124,13 @@ def render_short(images: list[Path], narration: Path, output: Path, *,
     photos = inspect_photos(images)
     if not FONT.is_file():
         raise FileNotFoundError("Installer fonts-dejavu-core avant de rendre le Short")
-    output = output.expanduser().resolve()
+    # Check symlinks before resolving the destination: resolve() would hide them.
+    output = output.expanduser().absolute()
+    report_path = output.with_suffix(".report.json")
+    if output.is_symlink() or report_path.is_symlink() or output.parent.is_symlink():
+        raise ValueError("Liens symboliques de rendu interdits")
     if output.suffix.lower() != ".mp4" or not output.parent.is_dir():
         raise ValueError("Sortie MP4 dans le dossier de rendu obligatoire")
-    if output.is_symlink() or output.with_suffix(".report.json").is_symlink():
-        raise ValueError("Liens symboliques de rendu interdits")
     w, h, fps = (360, 640, 24) if preview else (1080, 1920, 30)
     transition = .3 if len(images) > 1 else 0.
     seconds = meta["duration"]
@@ -252,6 +254,8 @@ def render_short(images: list[Path], narration: Path, output: Path, *,
         report_tmp = work / "short.report.json"
         report_tmp.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         # No incomplete .mp4 is ever exposed to Android clients.
+        if output.is_symlink() or report_path.is_symlink():
+            raise ValueError("Lien symbolique détecté avant publication")
         os.replace(tmp_video, output)
-        os.replace(report_tmp, output.with_suffix(".report.json"))
+        os.replace(report_tmp, report_path)
     return report
