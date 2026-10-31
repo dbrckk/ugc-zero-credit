@@ -4,6 +4,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import subprocess
+import shutil
+import secrets
 import tempfile
 import threading
 import time
@@ -119,6 +121,61 @@ class WebStudioTests(unittest.TestCase):
         streams=json.loads(info)['streams']
         self.assertEqual((next(x['width'] for x in streams if x['codec_type']=='video'),next(x['height'] for x in streams if x['codec_type']=='video')),(360,640))
         self.assertTrue(any(x['codec_type']=='audio' for x in streams))
+
+    def test_05_real_render_admission_and_edit_lock(self):
+        """Run real FFmpeg work: duplicate, edit lock, bounded queue, recovery."""
+        original = self.server.root / self.pid
+        extra_ids = [secrets.token_hex(8) for _ in range(2)]
+        for pid in extra_ids:
+            dest = self.server.root / pid
+            dest.mkdir()
+            for filename in ("meta.json", "media.json", "project.json"):
+                shutil.copy2(original / filename, dest / filename)
+            shutil.copytree(original / "media", dest / "media")
+            (dest / "renders").mkdir()
+        # Full-HD encoding holds the single worker while the second job queues.
+        code, data = self.request('/api/projects/' + self.pid + '/render',
+                                  method='POST', data={'preview': False})
+        self.assertEqual(code, 202, data)
+        code, data = self.request('/api/projects/' + self.pid + '/render',
+                                  method='POST', data={'preview': True})
+        self.assertEqual(code, 409, data)
+        code, data = self.request('/api/projects/' + self.pid + '/configure',
+                                  method='POST', data=self.payload())
+        self.assertEqual(code, 409, data)
+        code, data = self.request('/api/projects/' + extra_ids[0] + '/render',
+                                  method='POST', data={'preview': True})
+        self.assertEqual(code, 202, data)
+        code, data = self.request('/api/projects/' + extra_ids[1] + '/render',
+                                  method='POST', data={'preview': True})
+        self.assertEqual(code, 429, data)
+        deadline = time.monotonic() + 240
+        final = {}
+        while time.monotonic() < deadline:
+            for pid in (self.pid, extra_ids[0]):
+                status, details = self.request('/api/projects/' + pid)
+                self.assertEqual(status, 200, details)
+                final[pid] = details['job']['status']
+            if all(final[p] in {'completed', 'failed'} for p in (self.pid, extra_ids[0])):
+                break
+            time.sleep(.5)
+        self.assertEqual(final.get(self.pid), 'completed', final)
+        self.assertEqual(final.get(extra_ids[0]), 'completed', final)
+        # Terminal jobs release their slots and unlock the saved configuration.
+        code, data = self.request('/api/projects/' + self.pid + '/configure',
+                                  method='POST', data=self.payload())
+        self.assertEqual(code, 200, data)
+        code, data = self.request('/api/projects/' + extra_ids[1] + '/render',
+                                  method='POST', data={'preview': True})
+        self.assertEqual(code, 202, data)
+        deadline = time.monotonic() + 120
+        while time.monotonic() < deadline:
+            status, details = self.request('/api/projects/' + extra_ids[1])
+            self.assertEqual(status, 200)
+            if details['job']['status'] in {'completed','failed'}:
+                break
+            time.sleep(.5)
+        self.assertEqual(details['job']['status'], 'completed', details['job'])
 
 
 if __name__=='__main__':
