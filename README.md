@@ -1,8 +1,8 @@
 # UGC Zero Credit
 
-**Studio UGC TikTok, Reels et YouTube Shorts — V9.** Assemble et contrôle localement des vidéos d'influenceuses IA **déjà existantes**, en conservant leur voix native. Aucune API de génération payante, aucun jeton d'inférence consommé.
+**Studio UGC TikTok, Reels et YouTube Shorts — V10.** Assemble et contrôle localement des vidéos d'influenceuses IA **déjà existantes**, en conservant leur voix native. Aucune API de génération payante, aucun jeton d'inférence consommé.
 
-## Studio web Android et fiabilité V9
+## Studio web Android et montage visuel V10
 
 Le studio web V8 permet de créer des projets, importer des vidéos parlées, images de produit, musiques et sous-titres SRT, gérer le storyboard, prévisualiser et exporter des vidéos 9:16. La **V9** sécurise les rendus sur les petits serveurs CPU :
 
@@ -35,6 +35,7 @@ Ouvrir `http://127.0.0.1:8787` sur Android, renseigner le jeton, importer les m�
 - Conserve ensemble l'image et l'audio natifs de chaque clip de présentatrice ; les inserts de produit ne coupent pas sa voix.
 - Exporte du H.264/AAC vertical **1080 × 1920 à 30 FPS** ; prévisualisation basse résolution disponible.
 - Anime localement les images produit (zooms, panoramiques, fondus) et atténue la musique sous la parole.
+- **V10 :** carte produit avec bordure et ombre, en incrustation à gauche ou à droite pour ne pas masquer tout le plan de la présentatrice. Le visage reste à vérifier manuellement.
 - Gère les sous-titres mot par mot **uniquement avec des horodatages fiables**, ou par phrases via un import SRT contrôlé (V7).
 - Vérifie les déclarations de droits, les horodatages, le format, la présence audio, la synchronisation temporelle source→export, les images noires/figées, les crêtes sonores et, optionnellement, les mouvements de bouche.
 - Prépare rapports, sous-titres SRT/ASS, captures et dossier de revue Android ; protège les fichiers originaux des écrasements.
@@ -64,11 +65,12 @@ python3 functional_checks_v6.py
 python3 functional_checks_v7.py
 python3 functional_checks_v8.py
 python3 functional_checks_v9.py
+python3 functional_checks_v10.py
 ```
 
 Test navigateur V8 facultatif (Playwright, Chromium installé séparément) : `python3 browser_smoke_v8.py`. Dans notre environnement de contrôle géré, Chromium interdit les navigations réseau : le test injecte les pages et fait passer les appels HTTP au vrai serveur via une passerelle Python ; les contrôles JavaScript et les API sont exercés, mais pas la lecture média réseau native de Chromium. Le test HTTP V8 couvre séparément les URL de lecture signées et les réponses `Range`.
 
-Documentation détaillée : [PROCESS_V6.md](PROCESS_V6.md), [PROCESS_V7.md](PROCESS_V7.md), [PROCESS_V8.md](PROCESS_V8.md) et [PROCESS_V9.md](PROCESS_V9.md).
+Documentation détaillée : [PROCESS_V6.md](PROCESS_V6.md), [PROCESS_V7.md](PROCESS_V7.md), [PROCESS_V8.md](PROCESS_V8.md) [PROCESS_V9.md](PROCESS_V9.md) et [PROCESS_V10.md](PROCESS_V10.md).
 
 ## Gratuit par défaut
 

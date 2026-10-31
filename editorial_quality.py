@@ -40,15 +40,19 @@ def analyze(checked:dict,overlays:list[dict],*,max_speech_covered=.55,max_contin
             hook_seconds=.8,max_cuts_per_minute=42)->dict:
     """Based on existing word or SRT phrase cue intervals; never guessed timestamps.
 
-    Note: an overlay is assumed full screen, as the current FFmpeg compositor
-    fills the frame; even a fade still counts as potentially hiding the face.
+    Only full overlays replace the frame; picture-in-picture may still
+    locally cover the mouth, therefore placements need human visual review.
     """
     total=float(checked['total_duration'])
     real_words=checked.get('words', [])
     phrase_cues=checked.get('segments', [])
     precision='word' if real_words else ('phrase' if phrase_cues else 'unknown')
     words=_merge([(float(w['start']),float(w['end'])) for w in (real_words or phrase_cues)])
-    spans=_merge([(float(x['start']),float(x['start'])+float(x['duration'])) for x in overlays])
+    # Only fullscreen inserts replace the entire presenter frame.
+    full_inserts=[x for x in overlays if x.get("layout","full")=="full"]
+    pip_inserts=[x for x in overlays if x.get("layout","full") in {"pip_left","pip_right"}]
+    spans=_merge([(float(x['start']),float(x['start'])+float(x['duration'])) for x in full_inserts])
+    pip_spans=_merge([(float(x['start']),float(x['start'])+float(x['duration'])) for x in pip_inserts])
     spoken=_duration(words)
     hidden=_intersect(words,spans)
     cover=_duration(hidden)
@@ -83,6 +87,9 @@ def analyze(checked:dict,overlays:list[dict],*,max_speech_covered=.55,max_contin
             'speech_timing_precision':precision,'speech_intervals_are_conservative':precision=='phrase',
             'max_broll_seconds':round(continuous,3),'cuts_per_minute':round(cuts_per_minute,2),
             'hook_unobscured':visible==0,'broll_intervals':[[round(s,3),round(e,3)] for s,e in spans],
+            'picture_in_picture_count':len(pip_inserts),
+            'picture_in_picture_intervals':[[round(s,3),round(e,3)] for s,e in pip_spans],
+            'picture_in_picture_may_cover_speaker':bool(pip_inserts),
             'speech_covered_intervals':[[round(s,3),round(e,3)] for s,e in hidden],
             'flags':flags,'recommendations':advice,'score': None if ratio is None else round(100*(1-min(1,ratio)),1),
             'limits':{'max_speech_covered':max_speech_covered,'max_continuous_broll':max_continuous_broll,

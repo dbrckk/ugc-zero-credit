@@ -18,7 +18,9 @@ def propose(config:dict,checked:dict,*,max_cuts_per_minute=42,min_gap=.35,
             max_covered_speech=.50,hook=.80)->tuple[dict,dict]:
     total=float(checked['total_duration'])
     old=copy.deepcopy(config.get('overlays',[]))
-    ranked=sorted(enumerate(old),key=lambda x:(float(x[1]['start']),x[0]))
+    preserved_pip=[copy.deepcopy(x) for x in old if x.get("layout","full") in {"pip_left","pip_right"}]
+    ranked=sorted(((i,x) for i,x in enumerate(old) if x.get("layout","full")=="full"),
+                  key=lambda x:(float(x[1]['start']),x[0]))
     max_count=max(0,math.floor(max_cuts_per_minute*total/(60*2)))
     speech_cues=checked.get('words') or checked.get('segments',[])
     words=_merge([(float(w['start']),float(w['end'])) for w in speech_cues])
@@ -67,6 +69,7 @@ def propose(config:dict,checked:dict,*,max_cuts_per_minute=42,min_gap=.35,
         new.append(revised)
         changes.append({'index':i,'file':layer['file'],'original_start':layer['start'],
                         'new_start':start,'original_duration':layer['duration'],'new_duration':duration})
+    new.extend(preserved_pip)
     new.sort(key=lambda z:z['start'])
     result=copy.deepcopy(config)
     result['overlays']=new
