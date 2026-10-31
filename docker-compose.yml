@@ -1,0 +1,41 @@
+# The host-side socket stays bound to 127.0.0.1 even though the application
+# binds 0.0.0.0 inside its isolated Docker bridge network.
+name: ugc-zero-credit
+services:
+  studio:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    init: true
+    read_only: true
+    user: "10001:10001"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      UGC_STUDIO_TOKEN: ${UGC_STUDIO_TOKEN:?Set a strong private token in .env}
+      UGC_PRIVATE_DOCKER_BIND: "1"
+    ports:
+      - "127.0.0.1:${UGC_STUDIO_PORT:-8787}:8787"
+    volumes:
+      - studio_projects:/data
+    tmpfs:
+      - /tmp:rw,nosuid,size=512m,mode=1777
+    pids_limit: 160
+    mem_limit: 3g
+    cpus: 2.0
+    stop_grace_period: 90s
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import os,urllib.request; u=urllib.request.Request('http://127.0.0.1:8787/api/health',headers={'Authorization':'Bearer '+os.environ['UGC_STUDIO_TOKEN']}); assert urllib.request.urlopen(u,timeout=5).status==200"
+      interval: 20s
+      timeout: 8s
+      retries: 4
+      start_period: 45s
+volumes:
+  studio_projects:
