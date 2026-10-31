@@ -1,7 +1,7 @@
 name: V14 real narrated photo Shorts — local CPU Piper plus FFmpeg
 on:
   push:
-    branches: [feat/v14-narrated-photo-shorts, feat/v15-short-visual-polish]
+    branches: [feat/v14-narrated-photo-shorts, feat/v15-short-visual-polish, feat/v16-visual-storytelling]
   workflow_dispatch:
 permissions:
   contents: read
@@ -28,6 +28,7 @@ jobs:
         env:
           UGC_TEST_PIPER_MODEL: ${{ runner.temp }}/ugc-voices/fr_FR-siwis-medium.onnx
           UGC_TEST_PIPER_MODEL_EN: ${{ runner.temp }}/ugc-voices/en_US-lessac-medium.onnx
+          UGC_V16_ARTIFACTS_DIR: ${{ runner.temp }}/ugc-v16-frames
         run: |
           python -m compileall -q studio_web.py narrated_short.py functional_checks_v14.py
           node --check studio_web/studio.js
@@ -36,6 +37,14 @@ jobs:
           python functional_checks_v11_web.py
           python functional_checks_v10.py
           python functional_checks_v9.py
+      - name: Save real preview and Full-HD frames for visual QA
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ugc-v16-real-visual-frames
+          path: ${{ runner.temp }}/ugc-v16-frames/*.png
+          if-no-files-found: ignore
+          retention-days: 3
       - name: Build real private Docker studio (two ONNX voice models)
         run: |
           printf '%s\n' 'UGC_STUDIO_TOKEN=v14-ci-private-long-token-for-testing-only' 'UGC_STUDIO_PORT=18787' > .env
