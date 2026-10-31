@@ -1,6 +1,6 @@
 # UGC Zero Credit
 
-**Studio UGC TikTok, Reels et YouTube Shorts — V13.** Assemble et contrôle localement des vidéos d'influenceuses IA **déjà existantes**, en conservant leur voix native. Aucune API de génération payante, aucun jeton d'inférence consommé.
+**Studio UGC TikTok, Reels et YouTube Shorts — V15.** Assemble et contrôle localement des vidéos d'influenceuses IA **déjà existantes**, en conservant leur voix native. Aucune API de génération payante, aucun jeton d'inférence consommé.
 
 ## Studio Android, rendu V10 et génération vocale locale V11
 
@@ -29,6 +29,10 @@ ssh -L 8787:127.0.0.1:8787 utilisateur@serveur
 Ouvrir `http://127.0.0.1:8787` sur Android, renseigner le jeton, importer les médias, configurer l'ordre des clips, les droits, les inserts et les sous-titres puis cliquer sur **Exporter 1080 × 1920**.
 
 **Sécurité :** accès loopback seulement, tunnel SSH nécessaire si le serveur est distant. **Ne pas exposer ce serveur directement à Internet.** Le rendu consomme CPU, espace disque et électricité, mais aucun crédit IA distant. Voir [PROCESS_V8.md](PROCESS_V8.md) pour toutes les instructions et limites.
+
+## V15 — lisibilité des mentions sur les Shorts
+
+La V15 réduit la taille de la mention obligatoire sur les aperçus 360 × 640 pour éviter son débordement horizontal ; le rendu 1080 × 1920 utilise aussi une taille plus sûre. Le rapport d'export indique `safe_disclosure_v15`. Les tests FFmpeg V14 sont réexécutés sur la branche avant fusion.
 
 ## V14 — transformer une narration FR/EN et des photos en vrai Short 9:16
 
