@@ -3,6 +3,16 @@
 Cette version installe le studio et ses dépendances sans reconfigurer Python manuellement :
 **Docker, Piper 1.8.0, FFmpeg, les deux modèles ONNX, un volume de projets persistant et un jeton sécurisé**.
 
+## Une seule commande, même sans clone préalable
+
+Sur un serveur Linux Debian/Ubuntu ayant accès à Internet, lancer **une seule ligne** depuis son terminal SSH :
+
+```bash
+curl -fsSLo /tmp/ugc-bootstrap.sh https://raw.githubusercontent.com/dbrckk/ugc-zero-credit/main/bootstrap.sh && bash /tmp/ugc-bootstrap.sh
+```
+
+La commande récupère uniquement le script de **ton dépôt** GitHub, vérifie l'origine d'un éventuel clone existant puis lance l'installation automatiquement. Elle ne fait aucune modification à distance si le dossier Git existant contient des changements locaux ou se trouve sur une autre branche.
+
 ## Une seule commande une fois le dépôt présent sur le serveur
 
 Sur un serveur **Linux Debian ou Ubuntu** (Docker déjà présent ou accès sudo pour l'installer) :

@@ -16,16 +16,21 @@ jobs:
         run: |
           python3 -m compileall -q studio_web.py offline_presenter.py voice_catalog.py
           bash -n install_studio.sh
+          bash -n bootstrap.sh
           if grep -E '^ *-.*0\.0\.0\.0:[0-9]' docker-compose.yml; then
             echo "Public container port forbidden"; exit 1
           fi
           docker compose version
-      - name: Build real Piper + FFmpeg image with both voices (cached build layers)
+      - name: Install through actual single-command script (Docker, Piper, FFmpeg, FR + EN)
         run: |
-          export UGC_STUDIO_TOKEN=ci-local-test-token-THIS-IS-NOT-FOR-PRODUCTION
-          export UGC_STUDIO_PORT=18787
-          docker compose -f docker-compose.yml build
-          docker compose -f docker-compose.yml up -d
+          printf '%s\\n' 'UGC_STUDIO_TOKEN=ci-local-test-token-THIS-IS-NOT-FOR-PRODUCTION' 'UGC_STUDIO_PORT=18787' > .env
+          chmod 600 .env
+          bash install_studio.sh
+          python3 - <<'PY'
+          from pathlib import Path
+          assert Path('.env').stat().st_mode & 0o077 == 0
+          print("Private token file has owner-only permissions.")
+          PY
       - name: Generate French and English WAV through the private HTTP studio
         env:
           UGC_STUDIO_TOKEN: ci-local-test-token-THIS-IS-NOT-FOR-PRODUCTION

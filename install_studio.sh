@@ -72,9 +72,27 @@ fi
 "${docker_cli[@]}" compose -f docker-compose.yml config --quiet
 "${docker_cli[@]}" compose -f docker-compose.yml up --build -d --remove-orphans
 
+# Ensure startup and authentication really work. Don't report success merely
+# because Docker started a process.
+healthy=0
+for attempt in $(seq 1 40); do
+  if "${docker_cli[@]}" compose -f docker-compose.yml exec -T studio python -c \
+    "import os,urllib.request; q=urllib.request.Request('http://127.0.0.1:8787/api/health',headers={'Authorization':'Bearer '+os.environ['UGC_STUDIO_TOKEN']}); r=urllib.request.urlopen(q,timeout=5); assert r.status==200" >/dev/null 2>&1; then
+    healthy=1
+    break
+  fi
+  sleep 2
+done
+if [[ "$healthy" != "1" ]]; then
+  echo "ÉCHEC : conteneur installé mais serveur HTTP non sain. Inspecter : docker compose logs --tail 60" >&2
+  "${docker_cli[@]}" compose -f docker-compose.yml ps
+  exit 3
+fi
+
 echo ""
 echo "Studio CPU bilingue (accès privé uniquement)."
-echo "Depuis ce serveur : http://127.0.0.1:8787"
+port="$(sed -n 's/^UGC_STUDIO_PORT=//p' .env | head -1)"
+echo "Depuis ce serveur : http://127.0.0.1:${port:-8787}"
 echo "Depuis Android, créer d'abord le tunnel SSH indiqué dans PROCESS_V13.md."
 echo "Jeton pour l'écran de connexion :"
 sed -n 's/^UGC_STUDIO_TOKEN=//p' .env

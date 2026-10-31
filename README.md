@@ -35,9 +35,7 @@ Ouvrir `http://127.0.0.1:8787` sur Android, renseigner le jeton, importer les m�
 Le [guide V13](PROCESS_V13.md) fournit une installation reproductible et entièrement locale : Docker, FFmpeg, Piper CPU, voix **française et anglaise**, stockage privé persistant, jeton et démarrage automatique.
 
 ```bash
-cd ugc-zero-credit
-git pull origin main
-bash install_studio.sh
+curl -fsSLo /tmp/ugc-bootstrap.sh https://raw.githubusercontent.com/dbrckk/ugc-zero-credit/main/bootstrap.sh && bash /tmp/ugc-bootstrap.sh
 ```
 
 Si le serveur utilise déjà Docker, aucune installation système manuelle n'est nécessaire. Sinon le script tente l'installation avec apt sur Debian/Ubuntu, sous sudo si nécessaire. Pour Android, conserver le tunnel SSH : **le studio ne devient jamais un service HTTP public**.

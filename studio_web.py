@@ -640,7 +640,12 @@ def main(argv=None):
                    voice_model_fr=a.voice_model_fr, voice_license_ref_fr=a.voice_license_ref_fr,
                    voice_model_en=a.voice_model_en, voice_license_ref_en=a.voice_license_ref_en)
     print(f"Studio UGC (sans générateur payant) : http://{a.host}:{a.port}", flush=True)
-    print(f"Jeton de connexion (à saisir dans le navigateur) : {token}", flush=True)
+    if docker_private:
+        # The private token is available in the server's chmod-600 .env file.
+        # Avoid copying long-lived secrets to Docker's persistent logs.
+        print("Jeton : consulter le fichier local .env de l'installateur.", flush=True)
+    else:
+        print(f"Jeton de connexion (à saisir dans le navigateur) : {token}", flush=True)
     try:
         httpd.serve_forever(poll_interval=0.2)
     except KeyboardInterrupt:
