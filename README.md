@@ -1,6 +1,6 @@
 # UGC Zero Credit
 
-**Studio UGC TikTok, Reels et YouTube Shorts — V12.** Assemble et contrôle localement des vidéos d'influenceuses IA **déjà existantes**, en conservant leur voix native. Aucune API de génération payante, aucun jeton d'inférence consommé.
+**Studio UGC TikTok, Reels et YouTube Shorts — V13.** Assemble et contrôle localement des vidéos d'influenceuses IA **déjà existantes**, en conservant leur voix native. Aucune API de génération payante, aucun jeton d'inférence consommé.
 
 ## Studio Android, rendu V10 et génération vocale locale V11
 
@@ -29,6 +29,20 @@ ssh -L 8787:127.0.0.1:8787 utilisateur@serveur
 Ouvrir `http://127.0.0.1:8787` sur Android, renseigner le jeton, importer les médias, configurer l'ordre des clips, les droits, les inserts et les sous-titres puis cliquer sur **Exporter 1080 × 1920**.
 
 **Sécurité :** accès loopback seulement, tunnel SSH nécessaire si le serveur est distant. **Ne pas exposer ce serveur directement à Internet.** Le rendu consomme CPU, espace disque et électricité, mais aucun crédit IA distant. Voir [PROCESS_V8.md](PROCESS_V8.md) pour toutes les instructions et limites.
+
+## V13 — installation autonome sur serveur privé (une commande)
+
+Le [guide V13](PROCESS_V13.md) fournit une installation reproductible et entièrement locale : Docker, FFmpeg, Piper CPU, voix **française et anglaise**, stockage privé persistant, jeton et démarrage automatique.
+
+```bash
+cd ugc-zero-credit
+git pull origin main
+bash install_studio.sh
+```
+
+Si le serveur utilise déjà Docker, aucune installation système manuelle n'est nécessaire. Sinon le script tente l'installation avec apt sur Debian/Ubuntu, sous sudo si nécessaire. Pour Android, conserver le tunnel SSH : **le studio ne devient jamais un service HTTP public**.
+
+**Prudence commerciale :** les licences des données ayant servi à entraîner les voix sont différentes, notamment le corpus Blizzard 2013 de Lessac (et l'historique de Siwis). Elles doivent être vérifiées avant des publicités monétisées.
 
 ## V12 — choix de la voix française ou anglaise (Piper CPU)
 
@@ -81,7 +95,7 @@ python3 functional_checks_v12.py        # deux modèles locaux FR/EN requis
 
 Test navigateur V8 facultatif (Playwright, Chromium installé séparément) : `python3 browser_smoke_v8.py`. Dans notre environnement de contrôle géré, Chromium interdit les navigations réseau : le test injecte les pages et fait passer les appels HTTP au vrai serveur via une passerelle Python ; les contrôles JavaScript et les API sont exercés, mais pas la lecture média réseau native de Chromium. Le test HTTP V8 couvre séparément les URL de lecture signées et les réponses `Range`.
 
-Documentation détaillée : [PROCESS_V6.md](PROCESS_V6.md), [PROCESS_V7.md](PROCESS_V7.md), [PROCESS_V8.md](PROCESS_V8.md) [PROCESS_V9.md](PROCESS_V9.md), [PROCESS_V10.md](PROCESS_V10.md), [PROCESS_V11.md](PROCESS_V11.md) et [PROCESS_V12.md](PROCESS_V12.md).
+Documentation détaillée : [PROCESS_V6.md](PROCESS_V6.md), [PROCESS_V7.md](PROCESS_V7.md), [PROCESS_V8.md](PROCESS_V8.md) [PROCESS_V9.md](PROCESS_V9.md), [PROCESS_V10.md](PROCESS_V10.md), [PROCESS_V11.md](PROCESS_V11.md) [PROCESS_V12.md](PROCESS_V12.md) et [PROCESS_V13.md](PROCESS_V13.md).
 
 ## Gratuit par défaut
 

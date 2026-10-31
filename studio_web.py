@@ -623,8 +623,14 @@ def main(argv=None):
     parser.add_argument("--voice-model-en", type=Path, help="Modèle ONNX de voix anglaise")
     parser.add_argument("--voice-license-ref-en", default="", help="Référence de droits anglaise")
     a = parser.parse_args(argv)
-    if a.host not in {"127.0.0.1", "localhost", "::1"}:
-        print("ATTENTION: accès réseau non local; utiliser uniquement derrière HTTPS/VPN, jamais en HTTP public", file=sys.stderr)
+    # Docker publishes 127.0.0.1 on the HOST, but requires binding to all
+    # interfaces INSIDE its isolated bridge network. Never permit this mode
+    # outside Docker or without an explicit opt-in.
+    docker_private = (a.host == "0.0.0.0" and
+                      os.environ.get("UGC_PRIVATE_DOCKER_BIND") == "1" and
+                      Path("/.dockerenv").is_file())
+    if a.host not in {"127.0.0.1", "localhost", "::1"} and not docker_private:
+        print("REFUS: serveur HTTP non local. Utiliser le Docker Compose privé ou le tunnel SSH.", file=sys.stderr)
         raise SystemExit(2)
     token = a.token or secrets.token_urlsafe(24)
     if len(token) < 24:
