@@ -149,7 +149,7 @@ def assemble_config(project: Path, request: dict) -> tuple[dict, dict]:
             raise ValueError(f"Insert {idx} : droits manquants")
         output = {"file": file, "start": overlay.get("start"), "duration": overlay.get("duration"),
                   "rights": rights, "motion": overlay.get("motion", "static"),
-                  "fade": overlay.get("fade", 0.12)}
+                  "layout": overlay.get("layout", "full"), "fade": overlay.get("fade", 0.12)}
         if file.rsplit(".", 1)[-1].lower() in {"mp4", "mov", "mkv", "webm"}:
             output["source_in"] = overlay.get("source_in", 0)
         if rights == "licensed":

@@ -21,6 +21,7 @@ from audio_quality import analyze_audio as measure_audio
 from sync_audit import audit_timeline
 from face_quality import audit_talking_clips
 from editorial_quality import analyze as editorial_analyze
+from overlay_layout import card_geometry, framed_card_filters
 
 ALLOWED_RIGHTS = {"owned", "licensed", "ai_generated"}
 MAX_CLIPS = 24
@@ -120,6 +121,9 @@ def verify(config: dict, root: Path, *, inspect_media=True) -> dict:
         file=get_media_file(root,layer.get("file"))
         if file.suffix.lower() not in (".jpg",".jpeg",".png",".webp",".mp4",".mov",".mkv",".webm"):
             fail(f"Insert {i}: format interdit")
+        layout = layer.get("layout", "full")
+        if layout not in {"full", "pip_left", "pip_right"}:
+            fail(f"Insert {i}: layout invalide (full, pip_left, pip_right)")
         motion=layer.get("motion","push_in" if file.suffix.lower() in (".jpg",".jpeg",".png",".webp") else "static")
         if motion not in ALLOWED_MOTIONS:fail(f"Insert {i}: mouvement inconnu {motion}")
         crop_region=layer.get("subject_crop")
@@ -439,29 +443,33 @@ def build(config:dict,root:Path, output:Path, *,preview=False, full_decode=True,
             start=float(layer["start"]);d=float(layer["duration"])
             fx=float(layer.get("focus_x",.5));fy=float(layer.get("focus_y",.5))
             src=get_media_file(root2,layer["file"])
+            geom = card_geometry(layer.get("layout", "full"), w, h)
+            card_w, card_h = geom["inner_width"], geom["inner_height"]
             # Les frames B-roll ne transmettent JAMAIS de son: l'influenceuse continue de parler.
             if src.suffix.lower() in (".jpg",".jpeg",".png",".webp"):
                 # Photo: vraie animation Ken Burns calculée sur les images source.
                 # Aucun modèle génératif, aucune API, aucune image synthétique ajoutée.
                 motion=layer.get("motion","push_in")
-                scale=scale_cover(idx,w,h,fx,fy)
+                scale=scale_cover(idx,card_w,card_h,fx,fy)
                 crop_region=layer.get("subject_crop")
                 crop_filter=""
                 if crop_region is not None:
                     cx,cy,cw,ch=crop_region
                     crop_filter=f"crop=iw*{cw:.5f}:ih*{ch:.5f}:iw*{cx:.5f}:ih*{cy:.5f},"
                 source=f"[{idx}:v]trim=duration={d:.6f},setpts=PTS-STARTPTS,{crop_filter}{scale},fps={fps},"
-                source+=image_motion(w,h,fps,d,fx,fy,motion)+f",trim=duration={d:.6f},setpts=PTS-STARTPTS"
+                source+=image_motion(card_w,card_h,fps,d,fx,fy,motion)+f",trim=duration={d:.6f},setpts=PTS-STARTPTS"
             else:
                 src_in=number(layer,"source_in")
-                source=f"[{idx}:v]trim=start={src_in:.6f}:duration={d:.6f},setpts=PTS-STARTPTS,{scale_cover(idx,w,h,fx,fy)},fps={fps}"
+                source=f"[{idx}:v]trim=start={src_in:.6f}:duration={d:.6f},setpts=PTS-STARTPTS,{scale_cover(idx,card_w,card_h,fx,fy)},fps={fps}"
+            if geom["layout"] != "full":
+                source += "," + framed_card_filters(geom["border"], geom["shadow"])
             fade=float(layer.get("fade",.14))
             if fade>0:
                 source+=f",format=yuva420p,fade=t=in:st=0:d={fade:.5f}:alpha=1,fade=t=out:st={max(0,d-fade):.5f}:d={fade:.5f}:alpha=1"
             else:source+=",format=yuva420p"
             chain.append(source+f",setpts=PTS+{start:.6f}/TB[ov{j}]")
             to=f"vid{j}"
-            chain.append(f"[{current}][ov{j}]overlay=x=0:y=0:enable='between(t,{start:.6f},{start+d-.0001:.6f})':eof_action=pass:repeatlast=0:shortest=0[{to}]")
+            chain.append(f"[{current}][ov{j}]overlay=x={geom['x']}:y={geom['y']}:enable='between(t,{start:.6f},{start+d-.0001:.6f})':eof_action=pass:repeatlast=0:shortest=0[{to}]")
             current=to
         chain.append(f"[{current}]ass=filename=captions.ass,format=yuv420p[video]")
         if music_idx is not None:
@@ -505,7 +513,7 @@ def build(config:dict,root:Path, output:Path, *,preview=False, full_decode=True,
         write_srt(output.with_suffix(".srt"),checked["words"],segments=checked["segments"])
     qa["path"]=str(output)
     output.with_suffix(".qa.json").write_text(json.dumps(qa,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
-    report={"output":str(output),"duration":total,"width":w,"height":h,"fps":fps,"audio":"native preserved; sidechain background music optional","subtitle_words":len(checked["words"]),"subtitle_phrases":len(checked["segments"]),"caption_mode":checked["caption_mode"],"caption_groups":len(checked["segments"]) if checked["segments"] else len(caption_groups(checked["words"])),"editorial_review":checked["editorial_review"],"zero_credit":True,"no_network":True,"sha256":sha256(output),"inventory":checked["inventory"],"audio_measure":audio_measure,"sync_audio_gate":sync_report,"face_visual_gate":face_report,"editorial_quality":editorial_report,"publication":{"automatic_publish":False,"human_review_required":True,"structurally_valid":True,"ready_for_manual_review":True,"visual_speaker_gate_status":face_report["status"]},"quality_gate":{"ffprobe":True,"full_decode":full_decode,"atomic_publish":True,"signals":qa["signal_detections"],"warnings":qa["warnings"]},"human_review_required":["alignement lèvres / phonèmes: non mesuré par le pipeline (audit visuel = détection de bouche figée uniquement)", "emballage produit et publicités exactes", "droits des médias et voix", "intelligibilité du français"]}
+    report={"output":str(output),"duration":total,"width":w,"height":h,"fps":fps,"audio":"native preserved; sidechain background music optional","subtitle_words":len(checked["words"]),"subtitle_phrases":len(checked["segments"]),"caption_mode":checked["caption_mode"],"caption_groups":len(checked["segments"]) if checked["segments"] else len(caption_groups(checked["words"])),"editorial_review":checked["editorial_review"],"zero_credit":True,"no_network":True,"sha256":sha256(output),"inventory":checked["inventory"],"audio_measure":audio_measure,"sync_audio_gate":sync_report,"face_visual_gate":face_report,"editorial_quality":editorial_report,"overlay_layouts":[{"index":j,"file":layer["file"],"layout":layer.get("layout","full"),"geometry":card_geometry(layer.get("layout","full"),w,h)} for j,layer in enumerate(overlay)],"publication":{"automatic_publish":False,"human_review_required":True,"structurally_valid":True,"ready_for_manual_review":True,"visual_speaker_gate_status":face_report["status"]},"quality_gate":{"ffprobe":True,"full_decode":full_decode,"atomic_publish":True,"signals":qa["signal_detections"],"warnings":qa["warnings"]},"human_review_required":["alignement lèvres / phonèmes: non mesuré par le pipeline (audit visuel = détection de bouche figée uniquement)", "emballage produit et publicités exactes", "droits des médias et voix", "intelligibilité du français"]}
     output.with_suffix(".report.json").write_text(json.dumps(report,indent=2,ensure_ascii=False),encoding="utf-8")
     # Miniature 9:16 : extraction d’une vraie frame du rendu final (sans génération payante).
     cover_at=min(1.2,total*.35)
