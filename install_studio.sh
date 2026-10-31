@@ -59,8 +59,25 @@ else
   exit 2
 fi
 if ! "${docker_cli[@]}" compose version >/dev/null 2>&1; then
-  echo "ÉCHEC : Docker Compose V2 est requis (docker compose version)." >&2
-  exit 2
+  # An existing Docker Engine must never be replaced silently. Install only
+  # the missing Compose plugin if apt can do so without removing packages.
+  if command -v apt-get >/dev/null 2>&1; then
+    if [[ "$EUID" -eq 0 ]]; then
+      privilege=()
+    elif command -v sudo >/dev/null 2>&1; then
+      privilege=(sudo)
+    else
+      echo "ÉCHEC : sudo est nécessaire pour installer Docker Compose V2." >&2
+      exit 2
+    fi
+    if ! "${privilege[@]}" apt-get install --no-remove -y docker-compose-v2; then
+      "${privilege[@]}" apt-get install --no-remove -y docker-compose-plugin || true
+    fi
+  fi
+  if ! "${docker_cli[@]}" compose version >/dev/null 2>&1; then
+    echo "ÉCHEC : Docker Compose V2 absent ; voir https://docs.docker.com/compose/install/linux/" >&2
+    exit 2
+  fi
 fi
 
 if [[ -L .env ]]; then
@@ -73,7 +90,50 @@ if [[ ! -e .env ]]; then
   chmod 600 .env
   echo "Jeton sécurisé créé dans .env (non versionné)."
 fi
-if ! grep -Eq '^UGC_STUDIO_TOKEN=[A-Za-z0-9_-]{24,}$' .env; then
+chmod 600 .env
+if ! grep -Eq '^UGC_STUDIO_TOKEN=[A-Za-z0-9_-]{24,}
+  echo "ÉCHEC : jeton UGC_STUDIO_TOKEN invalide dans .env." >&2
+  exit 2
+fi
+
+# Reject accidental public bindings in the local Compose source.
+if ! grep -Fq '127.0.0.1:${UGC_STUDIO_PORT:-8787}:8787' docker-compose.yml; then
+  echo "ÉCHEC : port Docker non limité à l'interface locale." >&2
+  exit 2
+fi
+
+"${docker_cli[@]}" compose -f docker-compose.yml config --quiet
+"${docker_cli[@]}" compose -f docker-compose.yml up --build -d --remove-orphans
+
+# Ensure startup and authentication really work. Don't report success merely
+# because Docker started a process.
+healthy=0
+for attempt in $(seq 1 40); do
+  if "${docker_cli[@]}" compose -f docker-compose.yml exec -T studio python -c \
+    "import os,urllib.request; q=urllib.request.Request('http://127.0.0.1:8787/api/health',headers={'Authorization':'Bearer '+os.environ['UGC_STUDIO_TOKEN']}); r=urllib.request.urlopen(q,timeout=5); assert r.status==200" >/dev/null 2>&1; then
+    healthy=1
+    break
+  fi
+  sleep 2
+done
+if [[ "$healthy" != "1" ]]; then
+  echo "ÉCHEC : conteneur installé mais serveur HTTP non sain. Inspecter : docker compose logs --tail 60" >&2
+  "${docker_cli[@]}" compose -f docker-compose.yml ps
+  exit 3
+fi
+
+echo ""
+echo "Studio CPU bilingue (accès privé uniquement)."
+port="$(sed -n 's/^UGC_STUDIO_PORT=//p' .env | head -1)"
+echo "Depuis ce serveur : http://127.0.0.1:${port:-8787}"
+echo "Depuis Android, créer d'abord le tunnel SSH indiqué dans PROCESS_V13.md."
+echo "Jeton pour l'écran de connexion :"
+sed -n 's/^UGC_STUDIO_TOKEN=//p' .env
+echo ""
+echo "Le stockage est conservé dans le volume Docker ugc-zero-credit_studio_projects."
+echo "État :"
+"${docker_cli[@]}" compose -f docker-compose.yml ps
+ .env; then
   echo "ÉCHEC : jeton UGC_STUDIO_TOKEN invalide dans .env." >&2
   exit 2
 fi
