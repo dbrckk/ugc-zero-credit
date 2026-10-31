@@ -182,6 +182,30 @@ class V14RealEndToEnd(unittest.TestCase):
         full=self.verify_result("narrated.mp4",1080,1920)
         self.assertNotEqual(full.stat().st_size,(self.root/self.pid/"renders/narrated_preview.mp4").stat().st_size)
 
+    def test_05_real_timeline_progresses_inside_encoded_preview(self):
+        """Inspect real encoded pixels at start and end: progress must move."""
+        video = self.root/self.pid/"renders"/"narrated_preview.mp4"
+        report = json.loads(video.with_suffix(".report.json").read_text())
+        self.assertEqual(report["animated_progress_segments"], 20)
+        self.assertEqual(report["animated_headline"], "slide_fade_500ms")
+        # Track begins at x=23 and ends at x=336 in a 360px preview.
+        # Sample the centre of segment 15, away from its one-pixel gap.
+        x = 23 + round(14.5 * int(360*.87) / 20)
+        y = int(640 * .883) + 1
+        def sample(at):
+            result = subprocess.run(
+                ["ffmpeg", "-hide_banner", "-loglevel", "error",
+                 "-ss", f"{at:.3f}", "-i", str(video), "-frames:v", "1",
+                 "-vf", f"crop=1:1:{x}:{y},format=rgb24",
+                 "-f", "rawvideo", "-"],
+                capture_output=True, check=True, timeout=45)
+            self.assertEqual(len(result.stdout), 3)
+            return tuple(result.stdout)
+        early = sample(.12)
+        late = sample(report["duration"]-.18)
+        self.assertGreater(late[0], early[0]+45, (early, late))
+        self.assertGreater(late[1], early[1]+35, (early, late))
+
     def test_05_title_wrapping_boundaries(self):
         for original in ("Simple", "Premium everyday skincare for your routine",
                          "WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW"):
