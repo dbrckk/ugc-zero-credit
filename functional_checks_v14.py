@@ -14,7 +14,7 @@ import zlib
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 from studio_web import Handler, Studio
-from narrated_short import inspect_narration, DISCLOSURE
+from narrated_short import inspect_narration, DISCLOSURE, layout_title
 
 def png(rgb, w=320, h=400):
     raw = b"".join(b"\0" + bytes(rgb)*w for _ in range(h))
@@ -123,6 +123,9 @@ class V14RealEndToEnd(unittest.TestCase):
         self.assertEqual(report["status"],"REQUIRES_HUMAN_REVIEW")
         self.assertEqual(report["disclosure"],DISCLOSURE)
         self.assertEqual(report["photo_count"],2)
+        self.assertEqual(report["visual_text_layout"],"editorial_product_card_v16")
+        self.assertTrue(report["scene_counter"])
+        self.assertIn(report["title_line_count"],range(1,5))
         self.assertEqual(report["language"],"en_US")
         self.assertFalse(report["lip_sync_generated"])
         self.assertTrue(report["full_ffmpeg_decode_passed"])
@@ -142,16 +145,25 @@ class V14RealEndToEnd(unittest.TestCase):
         code,data=self.call(url,auth=False,headers={"Range":"bytes=0-31"})
         self.assertEqual((code,len(data)),(206,32))
         self.assertIn(b"ftyp",data)
+        sample_dir=os.getenv("UGC_V16_ARTIFACTS_DIR")
+        if sample_dir:
+            folder=Path(sample_dir)
+            folder.mkdir(parents=True,exist_ok=True)
+            subprocess.run(["ffmpeg","-hide_banner","-loglevel","error","-y",
+                "-ss","0.75","-i",str(file),"-frames:v","1",
+                str(folder/(file.stem+".png"))],check=True,timeout=75)
         return file
 
     def test_03_real_preview_and_two_distinct_scenes(self):
         endpoint="/api/projects/"+self.pid+"/narrated"
-        code,result=self.call(endpoint,"POST",self.payload())
+        code,result=self.call(endpoint,"POST",self.payload(title="A premium everyday product with lasting quality"))
         self.assertEqual(code,202,result)
-        self.assertEqual(self.call(endpoint,"POST",self.payload())[0],409)
+        self.assertEqual(self.call(endpoint,"POST",self.payload(title="A premium everyday product with lasting quality"))[0],409)
         project=self.wait("narrated")
         self.assertTrue(project["job"]["preview"])
         file=self.verify_result("narrated_preview.mp4",360,640)
+        report=json.loads(file.with_suffix(".report.json").read_text())
+        self.assertGreaterEqual(report["title_line_count"],2)
         def center(when):
             r=subprocess.run(["ffmpeg","-hide_banner","-loglevel","error","-ss",str(when),
                 "-i",str(file),"-frames:v","1","-vf","crop=1:1:180:320,format=rgb24",
@@ -170,7 +182,18 @@ class V14RealEndToEnd(unittest.TestCase):
         full=self.verify_result("narrated.mp4",1080,1920)
         self.assertNotEqual(full.stat().st_size,(self.root/self.pid/"renders/narrated_preview.mp4").stat().st_size)
 
-    def test_05_legacy_ui_and_private_status_unchanged(self):
+    def test_05_title_wrapping_boundaries(self):
+        for original in ("Simple", "Premium everyday skincare for your routine",
+                         "WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW"):
+            for preview in (True, False):
+                rendered, size, count = layout_title(original, preview)
+                self.assertEqual(rendered.replace("\n","").replace(" ",""),
+                                 original.replace(" ",""))
+                self.assertTrue(1 <= count <= 4)
+                self.assertTrue(all(len(line) <= 16 for line in rendered.split("\n")))
+                self.assertGreater(size, 0)
+
+    def test_06_legacy_ui_and_private_status_unchanged(self):
         code,page=self.call("/",auth=False)
         self.assertEqual(code,200)
         self.assertIn(b'id="narratedPanel"',page)

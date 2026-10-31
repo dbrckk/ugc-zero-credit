@@ -49,6 +49,18 @@ def clean_title(value: str) -> str:
     return value
 
 
+
+def layout_title(value: str, preview: bool) -> tuple[str, int, int]:
+    """Wrap a product name within the 9:16 headline area without inventing claims."""
+    import textwrap
+    lines = textwrap.wrap(clean_title(value), width=16, break_long_words=True,
+                          break_on_hyphens=False, replace_whitespace=True)
+    if not lines or len(lines) > 4:
+        raise ValueError("Titre trop long pour la zone de texte verticale")
+    size = {1: 20, 2: 19, 3: 17, 4: 15}[len(lines)]
+    return "\n".join(lines), size if preview else size * 3, len(lines)
+
+
 def inspect_narration(path: Path, expected_sha: str) -> dict:
     if path.suffix.lower() != ".wav" or not path.is_file() or path.is_symlink():
         raise ValueError("Un fichier WAV Piper existant est obligatoire")
@@ -107,6 +119,7 @@ def render_short(images: list[Path], narration: Path, output: Path, *,
     if not isinstance(preview, bool):
         raise ValueError("Aperçu invalide")
     title = clean_title(title)
+    formatted_title, title_size, title_lines = layout_title(title, preview)
     meta = inspect_narration(narration, narration_sha)
     photos = inspect_photos(images)
     if not FONT.is_file():
@@ -127,7 +140,7 @@ def render_short(images: list[Path], narration: Path, output: Path, *,
         work = Path(folder)
         title_file = work / "title.txt"
         disclosure_file = work / "disclosure.txt"
-        title_file.write_text(title, encoding="utf-8")
+        title_file.write_text(formatted_title, encoding="utf-8")
         disclosure_file.write_text(DISCLOSURE, encoding="utf-8")
         cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-y"]
         for photo in images:
@@ -140,14 +153,25 @@ def render_short(images: list[Path], narration: Path, output: Path, *,
             filt.append(
                 f"[{i}:v]split=2[b{i}][f{i}];"
                 f"[b{i}]scale={w}:{h}:force_original_aspect_ratio=increase,"
-                f"crop={w}:{h},boxblur=6:1,eq=brightness=-0.15[bg{i}];"
-                f"[f{i}]scale={int(w * .89)}:{int(h * .72)}:force_original_aspect_ratio=decrease,"
+                f"crop={w}:{h},boxblur=6:1,eq=brightness=-0.20[bg{i}];"
+                f"[f{i}]scale={int(w * .84)}:{int(h * .57)}:force_original_aspect_ratio=decrease,"
                 f"format=rgba,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:color=black@0[fg{i}];"
                 f"[bg{i}][fg{i}]overlay=shortest=1:format=auto,"
-                f"format=yuv420p,zoompan=z='min(zoom+0.00027,1.055)':"
-                f"x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':"
+                f"format=yuv420p,zoompan=z='min(zoom+0.00032,1.070)':"
+                f"x='(iw-iw/zoom)*{0.30 if i % 2 == 0 else 0.70}':"
+                f"y='(ih-ih/zoom)*{0.63 if i % 2 == 0 else 0.37}':"
                 f"d=1:s={w}x{h}:fps={fps},trim=duration={segment:.5f},"
-                f"setpts=PTS-STARTPTS,format=yuv420p[v{i}]")
+                f"setpts=PTS-STARTPTS,"
+                f"drawbox=x=0:y=0:w={w}:h={int(h*.19)}:color=black@0.34:t=fill,"
+                f"drawbox=x=0:y={int(h*.86)}:w={w}:h={int(h*.14)}:color=black@0.34:t=fill,"
+                f"drawbox=x={int(w*.065)}:y={int(h*.199)}:"
+                f"w={int(w*.87)}:h={int(h*.605)}:color=white@0.38:t={max(1,round(w*.003))},"
+                f"drawbox=x={int(w*.07)}:y={int(h*.176)}:"
+                f"w={int(w*.16)}:h={max(2,round(w*.005))}:color=0xE8D5BB@0.92:t=fill,"
+                f"drawtext=fontfile={FONT}:text='{i+1:02d} / {len(images):02d}':"
+                f"fontcolor=white:fontsize={max(12,round(w*.033))}:"
+                f"x={int(w*.07)}:y={int(h*.825)},"
+                f"format=yuv420p[v{i}]")
         previous = "v0"
         for i in range(1, len(images)):
             final = f"x{i}"
@@ -155,14 +179,13 @@ def render_short(images: list[Path], narration: Path, output: Path, *,
             filt.append(f"[{previous}][v{i}]xfade=transition=fade:"
                         f"duration={transition:.3f}:offset={offset:.5f}[{final}]")
             previous = final
-        # 360px previews must not clip the mandatory disclosure; 13px
-        # exceeded the available width for the French notice.
-        title_size, disclosure_size = (24, 9) if preview else (66, 30)
+        # Responsive headlines and an always-visible disclosure.
+        disclosure_size = 9 if preview else 30
         # textfile= avoids interpolating untrusted user text into FFmpeg syntax.
         filt.append(
             f"[{previous}]drawtext=fontfile={FONT}:textfile={title_file}:"
             f"fontcolor=white:fontsize={title_size}:"
-            f"x=(w-text_w)/2:y=h*0.075:box=1:"
+            f"x=(w-text_w)/2:y=h*0.056:box=1:"
             f"boxcolor=black@0.65:boxborderw={int(w*.02)},"
             f"drawtext=fontfile={FONT}:textfile={disclosure_file}:"
             f"fontcolor=white:fontsize={disclosure_size}:"
@@ -195,7 +218,10 @@ def render_short(images: list[Path], narration: Path, output: Path, *,
         if decoded.returncode:
             raise RuntimeError("Short non décodable complètement : " + decoded.stderr[-600:])
         report = {
-            "visual_text_layout": "safe_disclosure_v15",
+            "visual_text_layout": "editorial_product_card_v16",
+            "title_line_count": title_lines, "title_font_size": title_size,
+            "scene_counter": True,
+            "photo_composition": "centered_57pct_ken_burns_alternating",
             "status": "REQUIRES_HUMAN_REVIEW", "kind": "narrated_photo_short",
             "format": "9:16 H264 AAC", "width": w, "height": h, "fps": fps,
             "duration": round(length, 3), "language": meta["language"],
