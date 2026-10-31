@@ -155,7 +155,9 @@ def render_short(images: list[Path], narration: Path, output: Path, *,
             filt.append(f"[{previous}][v{i}]xfade=transition=fade:"
                         f"duration={transition:.3f}:offset={offset:.5f}[{final}]")
             previous = final
-        title_size, disclosure_size = (24, 13) if preview else (66, 36)
+        # 360px previews must not clip the mandatory disclosure; 13px
+        # exceeded the available width for the French notice.
+        title_size, disclosure_size = (24, 9) if preview else (66, 30)
         # textfile= avoids interpolating untrusted user text into FFmpeg syntax.
         filt.append(
             f"[{previous}]drawtext=fontfile={FONT}:textfile={title_file}:"
@@ -193,6 +195,7 @@ def render_short(images: list[Path], narration: Path, output: Path, *,
         if decoded.returncode:
             raise RuntimeError("Short non décodable complètement : " + decoded.stderr[-600:])
         report = {
+            "visual_text_layout": "safe_disclosure_v15",
             "status": "REQUIRES_HUMAN_REVIEW", "kind": "narrated_photo_short",
             "format": "9:16 H264 AAC", "width": w, "height": h, "fps": fps,
             "duration": round(length, 3), "language": meta["language"],

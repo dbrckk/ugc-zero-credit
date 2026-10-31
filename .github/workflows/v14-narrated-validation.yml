@@ -1,7 +1,7 @@
 name: V14 real narrated photo Shorts — local CPU Piper plus FFmpeg
 on:
   push:
-    branches: [feat/v14-narrated-photo-shorts]
+    branches: [feat/v14-narrated-photo-shorts, feat/v15-short-visual-polish]
   workflow_dispatch:
 permissions:
   contents: read
