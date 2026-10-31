@@ -1,8 +1,8 @@
 # UGC Zero Credit
 
-**Studio UGC TikTok, Reels et YouTube Shorts — V10.** Assemble et contrôle localement des vidéos d'influenceuses IA **déjà existantes**, en conservant leur voix native. Aucune API de génération payante, aucun jeton d'inférence consommé.
+**Studio UGC TikTok, Reels et YouTube Shorts — V11.** Assemble et contrôle localement des vidéos d'influenceuses IA **déjà existantes**, en conservant leur voix native. Aucune API de génération payante, aucun jeton d'inférence consommé.
 
-## Studio web Android et montage visuel V10
+## Studio Android, rendu V10 et génération vocale locale V11
 
 Le studio web V8 permet de créer des projets, importer des vidéos parlées, images de produit, musiques et sous-titres SRT, gérer le storyboard, prévisualiser et exporter des vidéos 9:16. La **V9** sécurise les rendus sur les petits serveurs CPU :
 
@@ -29,6 +29,12 @@ ssh -L 8787:127.0.0.1:8787 utilisateur@serveur
 Ouvrir `http://127.0.0.1:8787` sur Android, renseigner le jeton, importer les médias, configurer l'ordre des clips, les droits, les inserts et les sous-titres puis cliquer sur **Exporter 1080 × 1920**.
 
 **Sécurité :** accès loopback seulement, tunnel SSH nécessaire si le serveur est distant. **Ne pas exposer ce serveur directement à Internet.** Le rendu consomme CPU, espace disque et électricité, mais aucun crédit IA distant. Voir [PROCESS_V8.md](PROCESS_V8.md) pour toutes les instructions et limites.
+
+## Nouveau V11 — voix française réelle sur CPU
+
+Le studio peut générer un WAV en français **avec Piper ONNX installé localement**. Sur Android, le formulaire « Voix IA française · CPU » apparaît après connexion ; les fichiers WAV produits se lisent dans la bibliothèque de médias. Le bouton s'active seulement si le serveur est démarré avec `--voice-model` et `--voice-license-ref`. Aucun téléchargement automatique ou API payante.
+
+La commande `offline_presenter.py voice` fonctionne aussi sans interface. `offline_presenter.py presenter` fournit un pont vers **MuseTalk 1.5 CUDA** pour animer localement un portrait autorisé, sous réserve de poids et d'un GPU. La voie GPU n'est pas validée sur notre CI CPU ; elle refuse l'exécution si MuseTalk ou CUDA manque. **Ce logiciel ne crée pas l'apparence d'une nouvelle influenceuse photoréaliste.** Voir [PROCESS_V11.md](PROCESS_V11.md).
 
 ## Moteur de montage et contrôle local
 
@@ -66,11 +72,13 @@ python3 functional_checks_v7.py
 python3 functional_checks_v8.py
 python3 functional_checks_v9.py
 python3 functional_checks_v10.py
+python3 functional_checks_v11.py
+python3 functional_checks_v11_web.py   # modèle Piper requis
 ```
 
 Test navigateur V8 facultatif (Playwright, Chromium installé séparément) : `python3 browser_smoke_v8.py`. Dans notre environnement de contrôle géré, Chromium interdit les navigations réseau : le test injecte les pages et fait passer les appels HTTP au vrai serveur via une passerelle Python ; les contrôles JavaScript et les API sont exercés, mais pas la lecture média réseau native de Chromium. Le test HTTP V8 couvre séparément les URL de lecture signées et les réponses `Range`.
 
-Documentation détaillée : [PROCESS_V6.md](PROCESS_V6.md), [PROCESS_V7.md](PROCESS_V7.md), [PROCESS_V8.md](PROCESS_V8.md) [PROCESS_V9.md](PROCESS_V9.md) et [PROCESS_V10.md](PROCESS_V10.md).
+Documentation détaillée : [PROCESS_V6.md](PROCESS_V6.md), [PROCESS_V7.md](PROCESS_V7.md), [PROCESS_V8.md](PROCESS_V8.md) [PROCESS_V9.md](PROCESS_V9.md), [PROCESS_V10.md](PROCESS_V10.md) et [PROCESS_V11.md](PROCESS_V11.md).
 
 ## Gratuit par défaut
 
