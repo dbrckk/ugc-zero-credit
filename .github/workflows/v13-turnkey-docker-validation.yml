@@ -23,7 +23,7 @@ jobs:
           docker compose version
       - name: Install through actual single-command script (Docker, Piper, FFmpeg, FR + EN)
         run: |
-          printf '%s\\n' 'UGC_STUDIO_TOKEN=ci-local-test-token-THIS-IS-NOT-FOR-PRODUCTION' 'UGC_STUDIO_PORT=18787' > .env
+          printf '%s\n' 'UGC_STUDIO_TOKEN=ci-local-test-token-THIS-IS-NOT-FOR-PRODUCTION' 'UGC_STUDIO_PORT=18787' > .env
           chmod 600 .env
           bash install_studio.sh
           python3 - <<'PY'
