@@ -186,7 +186,8 @@ def render_short(images: list[Path], narration: Path, output: Path, *,
             filt.append(f"[{previous}][v{i}]xfade=transition=fade:"
                         f"duration={transition:.3f}:offset={offset:.5f}[{final}]")
             previous = final
-        # Responsive headlines and an always-visible disclosure.
+        # Responsive headlines animate into place in the opening half-second.
+        # These are real time-dependent FFmpeg expressions, not static frames.
         disclosure_size = 9 if preview else 30
         title_layers = []
         for index, line_file in enumerate(title_files):
@@ -194,8 +195,28 @@ def render_short(images: list[Path], narration: Path, output: Path, *,
             title_layers.append(
                 f"drawtext=fontfile={FONT}:textfile={line_file}:"
                 f"fontcolor=white:fontsize={title_size}:"
-                f"x=(w-text_w)/2:y={y}:shadowcolor=black@0.60:"
-                f"shadowx=1:shadowy=2")
+                f"x=(w-text_w)/2:"
+                f"y='{y}+{round(w * .045)}*max(0\\,1-t/0.5)':"
+                f"alpha='min(1\\,max(0\\,(t-0.08)/0.42))':"
+                f"shadowcolor=black@0.60:shadowx=1:shadowy=2")
+        # A true timeline indicator advances throughout the narration.
+        # Each of 20 segments is revealed by FFmpeg's frame-time expression;
+        # the 9:16 safe area keeps it clear of the mandatory disclosure.
+        track_x, track_y = int(w * .065), int(h * .883)
+        track_w, track_h = int(w * .87), max(3, round(w * .009))
+        progress_layers = [
+            f"drawbox=x={track_x}:y={track_y}:w={track_w}:h={track_h}:"
+            f"color=black@0.68:t=fill"
+        ]
+        for index in range(20):
+            x0 = track_x + round(index * track_w / 20)
+            x1 = track_x + round((index + 1) * track_w / 20)
+            width = max(1, x1 - x0 - 1)
+            threshold = (index + 1) * seconds / 20
+            progress_layers.append(
+                f"drawbox=x={x0}:y={track_y}:w={width}:h={track_h}:"
+                f"color=0xE8D5BB@0.95:t=fill:"
+                f"enable='gte(t\\,{threshold:.5f})'")
         # Separate lines prevent missing-glyph squares; textfiles avoid injecting
         # untrusted product names into the FFmpeg filter expression.
         filt.append(
@@ -204,7 +225,7 @@ def render_short(images: list[Path], narration: Path, output: Path, *,
             f"fontcolor=white:fontsize={disclosure_size}:"
             f"x=(w-text_w)/2:y=h*0.925-text_h:"
             f"box=1:boxcolor=black@0.8:boxborderw={int(w*.008)},"
-            f"format=yuv420p[out]")
+            + ",".join(progress_layers) + ",format=yuv420p[out]")
         tmp_video = work / "short.mp4"
         cmd += ["-filter_complex", ";".join(filt),
                 "-map", "[out]", "-map", f"{len(images)}:a:0",
@@ -231,7 +252,9 @@ def render_short(images: list[Path], narration: Path, output: Path, *,
         if decoded.returncode:
             raise RuntimeError("Short non décodable complètement : " + decoded.stderr[-600:])
         report = {
-            "visual_text_layout": "editorial_product_card_v16",
+            "visual_text_layout": "animated_product_card_v18",
+            "animated_headline": "slide_fade_500ms",
+            "animated_progress_segments": 20,
             "title_line_count": title_lines, "title_font_size": title_size,
             "scene_counter": True,
             "photo_composition": "centered_57pct_ken_burns_alternating",
