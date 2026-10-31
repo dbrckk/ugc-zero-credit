@@ -27,7 +27,8 @@ from urllib.parse import parse_qs, urlparse, quote
 from ugc import build, probe, verify
 from subtitle_import import parse_srt
 from studio_scheduling import admission, is_active
-from offline_presenter import clean_text, synthesize, voice_model as inspect_piper_model
+from offline_presenter import clean_text, synthesize
+from voice_catalog import configure_voices, pick_voice, available_languages
 
 ROOT = Path(__file__).resolve().parent
 UI = ROOT / "studio_web"
@@ -209,18 +210,16 @@ class Studio(ThreadingHTTPServer):
     allow_reuse_address = True
 
     def __init__(self, address, handler, root: Path, token: str,
-                 voice_model: Path | None = None, voice_license_ref: str = ""):
+                 voice_model: Path | None = None, voice_license_ref: str = "",
+                 voice_model_fr: Path | None = None, voice_license_ref_fr: str = "",
+                 voice_model_en: Path | None = None, voice_license_ref_en: str = ""):
+        # Validate all models and language codes before opening a listening socket.
+        self.voice_models = configure_voices(
+            legacy_model=voice_model, legacy_license=voice_license_ref,
+            french_model=voice_model_fr, french_license=voice_license_ref_fr,
+            english_model=voice_model_en, english_license=voice_license_ref_en)
+        self.voice_language = next(iter(self.voice_models.values()))["locale"] if len(self.voice_models) == 1 else ""
         super().__init__(address, handler)
-        self.voice_model = voice_model.expanduser().resolve() if voice_model else None
-        self.voice_license_ref = voice_license_ref
-        if self.voice_model:
-            if len(voice_license_ref.strip()) < 8:
-                raise ValueError("Référence de droits Piper absente : impossible d'activer la voix")
-            try:
-                import piper  # fail early, rather than enable a broken Android button
-            except ImportError as exc:
-                raise RuntimeError("Moteur Piper non installé : pip install piper-tts") from exc
-        self.voice_language = inspect_piper_model(self.voice_model)["language"] if self.voice_model else ""
         self.root = root.resolve()
         self.root.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.token = token
@@ -381,8 +380,9 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if parts == ["", "api", "health"]:
                 return self.json_response(200, {"ok": True, "service": "ugc-zero-credit-web", "paid_generators": False,
-                                                "voice_generation_enabled": bool(self.server.voice_model),
-                                                "voice_language": self.server.voice_language})
+                                                "voice_generation_enabled": bool(self.server.voice_models),
+                                                "voice_language": self.server.voice_language,
+                                                "voice_languages": available_languages(self.server.voice_models)})
             if parts == ["", "api", "projects"]:
                 data = self.server.root
                 entries = []
@@ -450,10 +450,16 @@ class Handler(BaseHTTPRequestHandler):
                         "captions": len(checked["segments"]), "clips": len(checked["talking"])})
                 if action == "voice":
                     request = self.json_request()
-                    if not self.server.voice_model:
-                        return self.error_response(503, "Aucun modèle Piper installé : configurer --voice-model")
+                    if not isinstance(request, dict):
+                        raise ValueError("Formulaire vocal invalide")
+                    if not self.server.voice_models:
+                        return self.error_response(503, "Aucun modèle Piper installé : configurer une voix locale")
                     if request.get("confirm_voice_rights") is not True:
                         return self.error_response(400, "Confirmer les droits d'usage de la voix")
+                    try:
+                        lang, voice = pick_voice(self.server.voice_models, request.get("language"))
+                    except LookupError as exc:
+                        return self.error_response(409, str(exc))
                     script = clean_text(request.get("text"))
                     with self.server.jobs_lock:
                         decision = admission(self.server.jobs, pid)
@@ -461,14 +467,14 @@ class Handler(BaseHTTPRequestHandler):
                             return self.error_response(409, "Un travail existe déjà pour ce projet")
                         if decision == "server_busy":
                             return self.error_response(429, "Serveur occupé : attendre la fin du travail")
-                        self.server.jobs[pid] = {"status": "queued", "kind": "voice"}
-                    voice_file = project / "media" / ("narration_" + secrets.token_hex(5) + ".wav")
+                        self.server.jobs[pid] = {"status": "queued", "kind": "voice", "language": lang}
+                    voice_file = project / "media" / ("narration_" + lang + "_" + secrets.token_hex(5) + ".wav")
                     def work_voice():
                         with self.server.jobs_lock:
-                            self.server.jobs[pid] = {"status": "running", "kind": "voice"}
+                            self.server.jobs[pid] = {"status": "running", "kind": "voice", "language": lang}
                         try:
-                            result = synthesize(script, self.server.voice_model, voice_file,
-                                                voice_license_ref=self.server.voice_license_ref,
+                            result = synthesize(script, voice["model"], voice_file,
+                                                voice_license_ref=voice["license_ref"],
                                                 confirmed=True)
                             with self.server.upload_lock:
                                 current = json.loads((project / "media.json").read_text(encoding="utf-8"))
@@ -479,20 +485,23 @@ class Handler(BaseHTTPRequestHandler):
                                     raise ValueError("Réserve disque insuffisante après génération")
                                 item = {"file": "media/" + voice_file.name, "bytes": size,
                                         **summarize_media(voice_file), "generated_by": "piper_local",
+                                        "language": lang, "voice_locale": result["language"],
                                         "voice_sha256": result["wav_sha256"]}
                                 current.append(item)
                                 store_json(project / "media.json", current)
                             with self.server.jobs_lock:
                                 self.server.jobs[pid] = {"status": "completed", "kind": "voice",
+                                                         "language": lang,
                                                          "output": item["file"], "duration": result["duration"]}
                         except Exception:
                             voice_file.unlink(missing_ok=True)
                             voice_file.with_suffix(".voice.json").unlink(missing_ok=True)
                             with self.server.jobs_lock:
                                 self.server.jobs[pid] = {"status": "failed", "kind": "voice",
+                                                         "language": lang,
                                                          "error": "Échec de génération vocale ; consulter les journaux privés"}
                     self.server.executor.submit(work_voice)
-                    return self.json_response(202, {"ok": True, "status": "queued", "kind": "voice"})
+                    return self.json_response(202, {"ok": True, "status": "queued", "kind": "voice", "language": lang})
                 if action == "render":
                     inp = self.json_request()
                     if type(inp.get("preview", False)) is not bool:
@@ -608,10 +617,12 @@ def main(argv=None):
     parser.add_argument("--data", type=Path, default=ROOT / "ugc_projects")
     parser.add_argument("--token", default=os.environ.get("UGC_STUDIO_TOKEN"))
     parser.add_argument("--voice-model", type=Path, help="Modèle Piper ONNX local (facultatif)")
-    parser.add_argument("--voice-license-ref", default="", help="Référence des droits de la voix")
+    parser.add_argument("--voice-license-ref", default="", help="Référence des droits de la voix (mode V11)")
+    parser.add_argument("--voice-model-fr", type=Path, help="Modèle ONNX de voix française")
+    parser.add_argument("--voice-license-ref-fr", default="", help="Référence de droits française")
+    parser.add_argument("--voice-model-en", type=Path, help="Modèle ONNX de voix anglaise")
+    parser.add_argument("--voice-license-ref-en", default="", help="Référence de droits anglaise")
     a = parser.parse_args(argv)
-    if a.voice_model and len(a.voice_license_ref.strip()) < 8:
-        raise SystemExit("Pour activer Piper, fournir --voice-license-ref et vérifier la licence")
     if a.host not in {"127.0.0.1", "localhost", "::1"}:
         print("ATTENTION: accès réseau non local; utiliser uniquement derrière HTTPS/VPN, jamais en HTTP public", file=sys.stderr)
         raise SystemExit(2)
@@ -619,7 +630,9 @@ def main(argv=None):
     if len(token) < 24:
         raise SystemExit("Token trop court : 24 caractères minimum")
     httpd = Studio((a.host, a.port), Handler, a.data, token,
-                   voice_model=a.voice_model, voice_license_ref=a.voice_license_ref)
+                   voice_model=a.voice_model, voice_license_ref=a.voice_license_ref,
+                   voice_model_fr=a.voice_model_fr, voice_license_ref_fr=a.voice_license_ref_fr,
+                   voice_model_en=a.voice_model_en, voice_license_ref_en=a.voice_license_ref_en)
     print(f"Studio UGC (sans générateur payant) : http://{a.host}:{a.port}", flush=True)
     print(f"Jeton de connexion (à saisir dans le navigateur) : {token}", flush=True)
     try:
