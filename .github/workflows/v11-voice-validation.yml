@@ -1,0 +1,48 @@
+name: V11 real local French TTS regression (free CPU)
+on:
+  push:
+    branches: [feat/v11-local-voice-musetalk]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  voice:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install real offline ONNX Piper engine and FFmpeg
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
+          python -m pip install piper-tts
+      - name: Fetch explicit French voice test model (only model download in CI)
+        run: |
+          python -m piper.download_voices fr_FR-siwis-medium --data-dir "$RUNNER_TEMP/ugc-voices"
+          test -s "$RUNNER_TEMP/ugc-voices/fr_FR-siwis-medium.onnx"
+          test -s "$RUNNER_TEMP/ugc-voices/fr_FR-siwis-medium.onnx.json"
+      - name: Check syntax and run real voice synthesis
+        env:
+          UGC_TEST_PIPER_MODEL: ${{ runner.temp }}/ugc-voices/fr_FR-siwis-medium.onnx
+        run: |
+          python -m compileall -q offline_presenter.py functional_checks_v11.py
+          python functional_checks_v11.py
+          python offline_presenter.py voice \
+            --voice-model "$UGC_TEST_PIPER_MODEL" \
+            --voice-license-ref "https://huggingface.co/rhasspy/piper-voices/blob/main/fr/fr_FR/siwis/medium/MODEL_CARD" \
+            --confirm-voice-rights \
+            --text "Bonjour. Ceci est une démonstration de voix française générée localement sans API payante." \
+            --output "$RUNNER_TEMP/narration_fr.wav"
+          ffprobe -v error -show_streams "$RUNNER_TEMP/narration_fr.wav"
+          test -s "$RUNNER_TEMP/narration_fr.voice.json"
+      - name: Upload French voice QA sample for manual listening
+        uses: actions/upload-artifact@v4
+        with:
+          name: ugc-v11-french-voice-sample
+          path: |
+            ${{ runner.temp }}/narration_fr.wav
+            ${{ runner.temp }}/narration_fr.voice.json
+          retention-days: 3
