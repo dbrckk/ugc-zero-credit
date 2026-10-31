@@ -157,6 +157,12 @@ def verify(config: dict, root: Path, *, inspect_media=True) -> dict:
             meta=probe(file)
             if not any(s.get("codec_type")=="audio" for s in meta["streams"]):fail("Fichier musique sans audio")
             inventory.append({"file":music["file"],"sha256":sha256(file),"rights":music["rights"],"type":"music"})
+    caption_mode = config.get("caption_mode", "words")
+    if caption_mode not in {"words", "segments", "none"}: fail("caption_mode: attendu words, segments ou none")
+    if caption_mode != "words" and config.get("words"):
+        fail("Les mots fournis sont incompatibles avec caption_mode != words")
+    if caption_mode != "segments" and config.get("segments"):
+        fail("Les phrases SRT exigent caption_mode=segments")
     words=config.get("words",[])
     if not isinstance(words,list):fail("Les mots doivent être une liste")
     positioned=[]; perclip={i:[] for i in range(len(clips))}
@@ -175,8 +181,38 @@ def verify(config: dict, root: Path, *, inspect_media=True) -> dict:
         if word["end"] - word["start"] > 3.0:fail("Mot sous-titré pendant plus de 3 secondes: contrôler le minutage")
     for w0,w1 in zip(positioned,positioned[1:]):
         if w0["end"]>w1["start"]+.04:fail("Les sous-titres se chevauchent (horodatages invalides)")
-    if config.get("caption_mode","words")=="words" and not positioned:
+    if caption_mode=="words" and not positioned:
         fail("Sous-titres mot-à-mot demandés, mais aucun horodatage fourni : ne pas en inventer.")
+    segments = config.get("segments", [])
+    if not isinstance(segments, list): fail("segments doit être une liste")
+    positioned_segments = []
+    for n, entry in enumerate(segments):
+        if not isinstance(entry, dict): fail(f"Phrase {n} invalide")
+        i = entry.get("clip")
+        if not isinstance(i, int) or isinstance(i, bool) or i not in perclip:
+            fail(f"Phrase {n}: clip incorrect")
+        start, end = number(entry,"start"), number(entry,"end")
+        if end <= start or end-start > 12:
+            fail(f"Phrase {n}: durée incorrecte")
+        if not isinstance(entry.get("text"), str) or not entry["text"].strip() or len(entry["text"].strip()) > 92:
+            fail(f"Phrase {n}: texte vide ou trop long")
+        if any(c in entry["text"] for c in ("<", ">", "{", "}")):
+            fail(f"Phrase {n}: balisage non autorisé")
+        clip = timeline[i]
+        if start < clip["source_in"] - .0005 or end > clip["source_in"] + clip["duration"] + .0005:
+            fail(f"Phrase {n}: horodatage hors clip source")
+        positioned_segments.append({"text": entry["text"].strip(),
+                                    "start": max(0., clip["timeline_start"]+start-clip["source_in"]),
+                                    "end": min(total, clip["timeline_start"]+end-clip["source_in"]),
+                                    "clip": i})
+    positioned_segments.sort(key=lambda seg: seg["start"])
+    for a,b in zip(positioned_segments, positioned_segments[1:]):
+        if a["end"] > b["start"]+.0005:
+            fail("Phrases SRT qui se chevauchent sur la timeline")
+    if caption_mode == "segments" and not positioned_segments:
+        fail("Mode segments demandé sans sous-titres")
+    if caption_mode == "none" and (positioned or positioned_segments):
+        fail("Les sous-titres doivent être vides en mode none")
     editorial=[]
     if not info.get("evidence_urls"):
         editorial.append("Revoir les preuves des allégations : aucun lien de référence dans product.evidence_urls")
@@ -187,8 +223,8 @@ def verify(config: dict, root: Path, *, inspect_media=True) -> dict:
         if dialogue and not isinstance(dialogue,str):fail("spoken_script doit être une chaîne")
         if isinstance(dialogue,str) and re.search(r"(?i)je l.ai testé|je l.ai reçu|j.ai essayé|j.ai reçu",dialogue):
             editorial.append(f"Clip {i}: témoignage personnel détecté ; interdire si influenceuse fictive")
-    return {"total_duration":total,"talking":timeline,"words":positioned,"inventory":inventory,
-            "warnings":([] if positioned else ["Pas de sous-titres : aucun horodatage fourni"]),
+    return {"total_duration":total,"talking":timeline,"words":positioned,"segments":positioned_segments,"caption_mode":caption_mode,"inventory":inventory,
+            "warnings":([] if positioned or positioned_segments else ["Pas de sous-titres : aucun horodatage fourni"]),
             "editorial_review":editorial}
 
 
@@ -229,7 +265,7 @@ def caption_groups(words:list[dict], *, limit=28, max_words=5, silence=.45) -> l
     return groups
 
 
-def write_captions(path:Path, words:list[dict],duration:float, width:int,height:int,disclosure:str):
+def write_captions(path:Path, words:list[dict],duration:float, width:int,height:int,disclosure:str, *, segments:list[dict] | None = None):
     """Captions persist through short gaps: no blinking between adjacent words."""
     fs=round(width*.049); upper=int(height*.105)
     margin_v=int(height*.23)
@@ -251,6 +287,13 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
     lines=[header]
     lines.append(f"Dialogue: 1,{fmt_time(0)},{fmt_time(duration)},Label,,0,0,0,,{ass_escape(disclosure)}\n")
+    # Genuine SRT cues use phrase-level timing. They deliberately do NOT
+    # animate individual words or synthesize fake timings.
+    if segments:
+        for segment in segments:
+            lines.append(f"Dialogue: 0,{fmt_time(segment['start'])},{fmt_time(segment['end'])},Caption,,0,0,0,,{ass_escape(segment['text'])}\n")
+        path.write_text("".join(lines), encoding="utf-8")
+        return
     groups=caption_groups(words)
     # One full caption is displayed throughout its acoustic group, including
     # natural gaps. Highlight state changes at the next real word onset.
@@ -271,15 +314,19 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     path.write_text("".join(lines),encoding="utf-8")
 
 
-def write_srt(path: Path, words: list[dict]):
+def write_srt(path: Path, words: list[dict], *, segments:list[dict] | None = None):
     """Editable SRT from the same source-measured stable caption groups."""
-    chunks=caption_groups(words)
+    chunks=caption_groups(words) if not segments else []
     def stamp(t):
         n=round(t*1000);h=n//3600000;m=n//60000%60;sc=n//1000%60;ms=n%1000
         return f"{h:02}:{m:02}:{sc:02},{ms:03}"
     lines=[]
-    for i,chunk in enumerate(chunks,1):
-        lines.extend([str(i),stamp(chunk[0]["start"])+" --> "+stamp(chunk[-1]["end"])," ".join(z["text"] for z in chunk),""])
+    if segments:
+        for i,seg in enumerate(segments,1):
+            lines.extend([str(i),stamp(seg["start"])+" --> "+stamp(seg["end"]),seg["text"],""])
+    else:
+        for i,chunk in enumerate(chunks,1):
+            lines.extend([str(i),stamp(chunk[0]["start"])+" --> "+stamp(chunk[-1]["end"])," ".join(z["text"] for z in chunk),""])
     path.write_text("\n".join(lines)+"\n",encoding="utf-8")
 
 
@@ -361,7 +408,7 @@ def build(config:dict,root:Path, output:Path, *,preview=False, full_decode=True,
     with tempfile.TemporaryDirectory(prefix=".ugc-zero-credit-", dir=output.parent) as tmp:
         tmpdir=Path(tmp)
         ass=tmpdir/"captions.ass"
-        write_captions(ass,checked["words"],total,w,h,config["product"]["disclosure"])
+        write_captions(ass,checked["words"],total,w,h,config["product"]["disclosure"], segments=checked["segments"])
         command=["ffmpeg","-hide_banner","-nostdin","-y","-loglevel","error"]
         for clip in checked["talking"]:command.extend(["-i",clip["file"]])
         overlay=config.get("overlays",[]);root2=root.resolve()
@@ -455,10 +502,10 @@ def build(config:dict,root:Path, output:Path, *,preview=False, full_decode=True,
         # Source-safe atomic replace on THE SAME filesystem, after mandatory QA gates.
         os.replace(output_tmp,output)
         (output.with_suffix(".ass")).write_text(ass.read_text(encoding="utf-8"),encoding="utf-8")
-        write_srt(output.with_suffix(".srt"),checked["words"])
+        write_srt(output.with_suffix(".srt"),checked["words"],segments=checked["segments"])
     qa["path"]=str(output)
     output.with_suffix(".qa.json").write_text(json.dumps(qa,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
-    report={"output":str(output),"duration":total,"width":w,"height":h,"fps":fps,"audio":"native preserved; sidechain background music optional","subtitle_words":len(checked["words"]),"caption_groups":len(caption_groups(checked["words"])),"editorial_review":checked["editorial_review"],"zero_credit":True,"no_network":True,"sha256":sha256(output),"inventory":checked["inventory"],"audio_measure":audio_measure,"sync_audio_gate":sync_report,"face_visual_gate":face_report,"editorial_quality":editorial_report,"publication":{"automatic_publish":False,"human_review_required":True,"structurally_valid":True,"ready_for_manual_review":True,"visual_speaker_gate_status":face_report["status"]},"quality_gate":{"ffprobe":True,"full_decode":full_decode,"atomic_publish":True,"signals":qa["signal_detections"],"warnings":qa["warnings"]},"human_review_required":["alignement lèvres / phonèmes: non mesuré par le pipeline (audit visuel = détection de bouche figée uniquement)", "emballage produit et publicités exactes", "droits des médias et voix", "intelligibilité du français"]}
+    report={"output":str(output),"duration":total,"width":w,"height":h,"fps":fps,"audio":"native preserved; sidechain background music optional","subtitle_words":len(checked["words"]),"subtitle_phrases":len(checked["segments"]),"caption_mode":checked["caption_mode"],"caption_groups":len(checked["segments"]) if checked["segments"] else len(caption_groups(checked["words"])),"editorial_review":checked["editorial_review"],"zero_credit":True,"no_network":True,"sha256":sha256(output),"inventory":checked["inventory"],"audio_measure":audio_measure,"sync_audio_gate":sync_report,"face_visual_gate":face_report,"editorial_quality":editorial_report,"publication":{"automatic_publish":False,"human_review_required":True,"structurally_valid":True,"ready_for_manual_review":True,"visual_speaker_gate_status":face_report["status"]},"quality_gate":{"ffprobe":True,"full_decode":full_decode,"atomic_publish":True,"signals":qa["signal_detections"],"warnings":qa["warnings"]},"human_review_required":["alignement lèvres / phonèmes: non mesuré par le pipeline (audit visuel = détection de bouche figée uniquement)", "emballage produit et publicités exactes", "droits des médias et voix", "intelligibilité du français"]}
     output.with_suffix(".report.json").write_text(json.dumps(report,indent=2,ensure_ascii=False),encoding="utf-8")
     # Miniature 9:16 : extraction d’une vraie frame du rendu final (sans génération payante).
     cover_at=min(1.2,total*.35)
@@ -509,6 +556,10 @@ def main():
     a=s.add_parser("assets");a.add_argument("project");a.add_argument("--output")
     a=s.add_parser("autoplan");a.add_argument("project");a.add_argument("--output",required=True);a.add_argument("--report")
     a=s.add_parser("review");a.add_argument("video");a.add_argument("--output",required=True)
+    a=s.add_parser("captions-import",help="Importer un SRT pour un clip, sans inventer de minutage mot à mot")
+    a.add_argument("project");a.add_argument("srt");a.add_argument("--clip",type=int,required=True)
+    a.add_argument("--timebase",choices=["clip","source"],default="clip")
+    a.add_argument("--output",required=True);a.add_argument("--replace-existing",action="store_true")
     args=p.parse_args()
     try:
         if args.cmd=="guide":
@@ -516,6 +567,10 @@ def main():
             target.parent.mkdir(parents=True,exist_ok=True)
             target.write_text(platform_guide(),encoding="utf-8")
             res={"guide":str(target),"dimensions":[1080,1920],"cost_credits":0}
+        elif args.cmd=="captions-import":
+            from subtitle_import import import_srt
+            res=import_srt(Path(args.project),Path(args.srt),Path(args.output),clip_index=args.clip,
+                           timebase=args.timebase,replace_existing=args.replace_existing)
         elif args.cmd=="audio-qa":res=measure_audio(Path(args.video))
         elif args.cmd=="doctor":
             from environment_doctor import doctor
@@ -552,10 +607,10 @@ def main():
                     fail("Points éditoriaux non résolus : "+"; ".join(res["editorial_review"]))
             elif args.cmd=="plan":
                 v=verify(c,root)
-                res={"product":c["product"]["name"],"total_duration":v["total_duration"],"talking_timeline":v["talking"],"overlays":[{"file":x["file"],"start":x["start"],"end":round(x["start"]+x["duration"],3)} for x in c.get("overlays",[])],"caption_words":len(v["words"]),"caption_groups":len(caption_groups(v["words"])),"editorial_review":v["editorial_review"],"editorial_quality":editorial_analyze(v,c.get("overlays",[])),"paid_services":0}
+                res={"product":c["product"]["name"],"total_duration":v["total_duration"],"talking_timeline":v["talking"],"overlays":[{"file":x["file"],"start":x["start"],"end":round(x["start"]+x["duration"],3)} for x in c.get("overlays",[])],"caption_words":len(v["words"]),"caption_groups":len(v["segments"]) if v["segments"] else len(caption_groups(v["words"])),"caption_mode":v["caption_mode"],"editorial_review":v["editorial_review"],"editorial_quality":editorial_analyze(v,c.get("overlays",[])),"paid_services":0}
             else:res=build(c,root,Path(args.output).resolve(),preview=args.preview,full_decode=not args.skip_full_decode,strict_sync=not args.skip_sync_gate,face_policy_override="required" if args.require_speaking_face else None)
         print(json.dumps(res,ensure_ascii=False,indent=2))
-    except (ValueError,RuntimeError,FileNotFoundError,subprocess.TimeoutExpired) as e:
+    except (ValueError,RuntimeError,FileNotFoundError,FileExistsError,subprocess.TimeoutExpired) as e:
         print("ÉCHEC :",e,file=sys.stderr);sys.exit(2)
 
 if __name__=="__main__":main()

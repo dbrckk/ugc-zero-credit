@@ -79,8 +79,10 @@ def assess(project:Path,video:Path,*,approvals:Path|None=None,full_decode=False)
         failures.append('Référence/visuel produit non documenté (product.product_reference)')
     if not product.get('evidence_urls'):
         failures.append('Sources des allégations non documentées (product.evidence_urls)')
-    if not checked['words']:
-        failures.append('Aucun sous-titre acoustiquement horodaté')
+    if not checked['words'] and not checked['segments']:
+        failures.append('Aucun sous-titre temporel fourni')
+    elif checked['segments']:
+        warnings.append('Sous-titres horodatés par phrase SRT, pas mot-à-mot; validation humaine de la diction et du texte requise')
     a=read_json(approvals) if approvals else None
     if not a:failures.append('Fiche d’approbation humaine absente (voir approvals.template.json)')
     else:

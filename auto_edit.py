@@ -20,11 +20,12 @@ def propose(config:dict,checked:dict,*,max_cuts_per_minute=42,min_gap=.35,
     old=copy.deepcopy(config.get('overlays',[]))
     ranked=sorted(enumerate(old),key=lambda x:(float(x[1]['start']),x[0]))
     max_count=max(0,math.floor(max_cuts_per_minute*total/(60*2)))
-    words=_merge([(float(w['start']),float(w['end'])) for w in checked.get('words',[])])
+    speech_cues=checked.get('words') or checked.get('segments',[])
+    words=_merge([(float(w['start']),float(w['end'])) for w in speech_cues])
     spoken=_duration(words)
     new=[];removed=[];changes=[]
     if not words:
-        report={'status':'REVIEW','message':'Impossible de proposer des coupes sûres sans horodatages des mots.',
+        report={'status':'REVIEW','message':'Impossible de proposer des coupes sûres sans horodatages de voix.',
                 'kept':0,'removed':[],'changes':[],'original_audit':analyze(checked,old),
                 'proposed_audit':None,'cost_credits':0,'network_calls':0}
         return copy.deepcopy(config),report
@@ -40,7 +41,7 @@ def propose(config:dict,checked:dict,*,max_cuts_per_minute=42,min_gap=.35,
         earliest=hook;latest=total-cta_reserved-duration
         if latest<=earliest:
             removed.append({'index':i,'file':layer['file'],'reason':'Aucune plage après le hook et avant le CTA'});continue
-        # Prefer gaps between measured words and remain near the original cue.
+        # Prefer gaps between provided word/cue intervals; SRT is a coarse upper bound.
         candidates={round(earliest+j*.1,3) for j in range(math.floor((latest-earliest)/.1)+1)}
         candidates.add(round(max(earliest,min(latest,float(layer['start']))),3))
         for a,b in zip(words,words[1:]):
@@ -76,6 +77,7 @@ def propose(config:dict,checked:dict,*,max_cuts_per_minute=42,min_gap=.35,
             'kept':len(new),'removed':removed,'changes':changes,
             'original_project_unchanged':True,'human_review_required':True,
             'warning':'Le placement automatique peut ne pas coïncider avec le sujet de la phrase; revoir le storyboard avant rendu.',
+            'speech_timing_precision':'word' if checked.get('words') else 'phrase',
             'cost_credits':0,'network_calls':0}
     return result,report
 

@@ -52,3 +52,34 @@ The synthetic example is **not publishable**. The example captions are illustrat
 No external generation API, no paid provider credits, no remote Actions run by default. Local rendering consumes CPU, disk, and electricity. Optional vision dependencies may require a one-time package download; optional local speech transcription requires a previously downloaded licensed model.
 
 Developed separately from [monteur-video](https://github.com/dbrckk/monteur-video) and transferred from the isolated V6 development branch. No examples containing real influencers, commercial products or unapproved media are included.
+
+## V7 — Import SRT local, sans faux alignement mot par mot
+
+La V7 accepte les sous-titres **horodatés par phrase** issus d'un fichier SRT.
+Ces temps sont conservés tels quels. Un SRT ne donne pas les horaires de chaque
+mot : **aucun surlignage mot par mot n'est inventé**.
+
+Depuis le répertoire du dépôt, avec un projet et des médias autorisés :
+
+```bash
+python3 ugc.py captions-import my_project.json voice.srt \
+  --clip 0 --timebase clip --output my_project_subtitled.json
+python3 ugc.py check my_project_subtitled.json
+python3 ugc.py render my_project_subtitled.json --output final_9x16.mp4
+python3 ugc.py review final_9x16.mp4 --output review_mobile.html
+```
+
+- `--clip` : index du clip parlant (à partir de 0).
+- `--timebase clip` : les horaires SRT commencent au début de la portion
+  conservée du clip. `--timebase source` : horaires de la source complète.
+- `--replace-existing` : obligatoire pour remplacer des sous-titres
+  existants. Le JSON original n'est jamais écrasé.
+- L'import refuse un SRT qui se chevauche, sort du clip, contient du balisage
+  ou des phrases excessivement longues pour un écran mobile.
+- Les contrôles éditoriaux déclarent `speech_timing_precision: phrase`
+  et continuent de demander une validation humaine de la diction et du texte.
+
+Documentation : [PROCESS_V7.md](PROCESS_V7.md).
+Tests ciblés : `python3 functional_checks_v7.py` (9 tests, dont un export
+FFmpeg et un contrôle de conservation audio natif). Les suites V3–V6 restent
+compatibles. Aucun workflow de génération IA payante n'est intégré.
