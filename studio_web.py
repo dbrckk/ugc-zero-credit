@@ -26,6 +26,7 @@ from urllib.parse import parse_qs, urlparse, quote
 
 from ugc import build, probe, verify
 from subtitle_import import parse_srt
+from studio_scheduling import admission, is_active
 
 ROOT = Path(__file__).resolve().parent
 UI = ROOT / "studio_web"
@@ -444,9 +445,11 @@ class Handler(BaseHTTPRequestHandler):
                     cfg = json.loads(cfg_file.read_text(encoding="utf-8"))
                     verify(cfg, project)
                     with self.server.jobs_lock:
-                        previous = self.server.jobs.get(pid, {})
-                        if previous.get("status") in {"queued", "running"}:
-                            return self.error_response(409, "Un export existe déjà")
+                        decision = admission(self.server.jobs, pid)
+                        if decision == "already_running":
+                            return self.error_response(409, "Un export existe déjà pour ce projet")
+                        if decision == "server_busy":
+                            return self.error_response(429, "Serveur occupé : attendre la fin d'un export")
                         self.server.jobs[pid] = {"status": "queued", "preview": preview}
                     output = project / "renders" / ("preview.mp4" if preview else "final.mp4")
                     def work():
@@ -522,9 +525,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def configure(self, project: Path):
         payload = self.json_request()
-        config, details = assemble_config(project, payload)
-        store_json(project / "project.json", config)
-        store_json(project / "studio_draft.json", payload)
+        # Keep configuration consistent with the snapshot used by the renderer.
+        # The same lock guards admission, so a render cannot queue mid-update.
+        with self.server.jobs_lock:
+            if is_active(self.server.jobs.get(project.name, {})):
+                return self.error_response(409, "Modification interdite pendant un export")
+            config, details = assemble_config(project, payload)
+            store_json(project / "project.json", config)
+            store_json(project / "studio_draft.json", payload)
         return self.json_response(200, {"ok": True, "config": config, **details})
 
 
