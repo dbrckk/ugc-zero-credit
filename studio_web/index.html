@@ -6,10 +6,15 @@
  <section class="panel" id="accessPanel"><h2>1. Connexion privée</h2><p>Jeton affiché dans le terminal du serveur. Il reste dans cet onglet uniquement.</p><div class="formline"><label>Jeton d'accès<input id="token" type="password" placeholder="Coller le jeton du serveur" autocomplete="off"></label><button id="connect">Connecter</button></div></section>
  <section class="panel hidden" id="projectsPanel"><h2>2. Choisir une publicité</h2><div class="formline"><label>Projet existant<select id="projects"><option value="">Sélectionner…</option></select></label><label>Nouveau projet<input id="projectName" placeholder="Ex. Rose Mystik"></label><button id="create">Créer</button></div><p class="hint" id="projectInfo"></p></section>
  <section class="panel hidden" id="mediaPanel"><h2>3. Importer les médias</h2><p>Vidéos de présentatrice avec leur <strong>audio natif</strong>, images ou vidéos du produit, musique facultative et SRT. 350 Mo maximum par fichier.</p><div class="formline"><input type="file" id="uploadFiles" multiple accept="video/mp4,video/quicktime,video/webm,video/x-matroska,image/png,image/jpeg,image/webp,audio/wav,audio/mpeg,audio/mp4,.srt"><button id="upload">Importer</button></div><p class="hint" id="uploadStatus"></p><div id="mediaGrid" class="media-grid"></div></section>
- <section class="panel hidden" id="voicePanel"><h2>4. Voix IA française · CPU</h2><p class="hint" id="voiceAvailability">La voix Piper doit être installée sur le serveur. Génère un WAV réel à partir du texte ; cette fonction ne fabrique pas de lèvres synchronisées.</p>
- <label>Texte de narration (2–1200 caractères)<textarea id="voiceText" rows="4" maxlength="1200" placeholder="Texte original, conforme et relu"></textarea></label>
+ <section class="panel hidden" id="voicePanel"><h2>4. Voix IA locale · Français / English</h2><p class="hint" id="voiceAvailability">Installer un modèle Piper pour chaque langue sur le serveur. Aucun appel API et aucun lip-sync automatique.</p>
+ <div class="grid-two">
+ <label for="voiceLanguage">Langue de la narration
+ <select id="voiceLanguage" aria-label="Langue de la narration"><option value="fr">Français</option><option value="en">English</option></select></label>
+ <label for="voiceText">Texte original, dans la langue choisie (2–1200 caractères)
+ <textarea id="voiceText" rows="4" maxlength="1200" placeholder="Texte original, conforme et relu"></textarea></label>
+ </div>
  <label class="inline-check"><input type="checkbox" id="voiceConsent"> Je confirme les droits de synthèse et l'usage autorisé du modèle vocal.</label>
- <div class="actions"><button id="voiceGenerate" class="secondary" disabled>Générer la voix française</button></div>
+ <div class="actions"><button id="voiceGenerate" class="secondary" disabled>Générer la narration</button></div>
  <p class="hint">Après génération, écouter le WAV dans la bibliothèque de médias. Il ne peut pas être utilisé comme clip parlant sans vidéo synchronisée.</p>
  </section>
  <section class="panel hidden" id="editorPanel"><h2>5. Préparer la publicité</h2>

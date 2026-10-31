@@ -1,6 +1,6 @@
 # UGC Zero Credit
 
-**Studio UGC TikTok, Reels et YouTube Shorts — V11.** Assemble et contrôle localement des vidéos d'influenceuses IA **déjà existantes**, en conservant leur voix native. Aucune API de génération payante, aucun jeton d'inférence consommé.
+**Studio UGC TikTok, Reels et YouTube Shorts — V12.** Assemble et contrôle localement des vidéos d'influenceuses IA **déjà existantes**, en conservant leur voix native. Aucune API de génération payante, aucun jeton d'inférence consommé.
 
 ## Studio Android, rendu V10 et génération vocale locale V11
 
@@ -30,9 +30,11 @@ Ouvrir `http://127.0.0.1:8787` sur Android, renseigner le jeton, importer les m�
 
 **Sécurité :** accès loopback seulement, tunnel SSH nécessaire si le serveur est distant. **Ne pas exposer ce serveur directement à Internet.** Le rendu consomme CPU, espace disque et électricité, mais aucun crédit IA distant. Voir [PROCESS_V8.md](PROCESS_V8.md) pour toutes les instructions et limites.
 
-## Nouveau V11 — voix française réelle sur CPU
+## V12 — choix de la voix française ou anglaise (Piper CPU)
 
-Le studio peut générer un WAV en français **avec Piper ONNX installé localement**. Sur Android, le formulaire « Voix IA française · CPU » apparaît après connexion ; les fichiers WAV produits se lisent dans la bibliothèque de médias. Le bouton s'active seulement si le serveur est démarré avec `--voice-model` et `--voice-license-ref`. Aucun téléchargement automatique ou API payante.
+Le studio peut désormais générer un WAV **en français ou en anglais** avec Piper ONNX local. L'écran Android comporte un sélecteur Français / English ; seules les langues réellement installées sont activées. Le serveur vérifie que chaque modèle correspond à sa langue avant son démarrage et refuse toute demande dans une langue absente. Aucune traduction automatique, aucun téléchargement de poids pendant la génération et aucune API payante.
+
+Activer les deux voix au démarrage avec `--voice-model-fr`, `--voice-license-ref-fr`, `--voice-model-en` et `--voice-license-ref-en`. L'ancienne configuration V11 (une seule voix) reste reconnue. Voir [PROCESS_V12.md](PROCESS_V12.md).
 
 La commande `offline_presenter.py voice` fonctionne aussi sans interface. `offline_presenter.py presenter` fournit un pont vers **MuseTalk 1.5 CUDA** pour animer localement un portrait autorisé, sous réserve de poids et d'un GPU. La voie GPU n'est pas validée sur notre CI CPU ; elle refuse l'exécution si MuseTalk ou CUDA manque. **Ce logiciel ne crée pas l'apparence d'une nouvelle influenceuse photoréaliste.** Voir [PROCESS_V11.md](PROCESS_V11.md).
 
@@ -47,7 +49,7 @@ La commande `offline_presenter.py voice` fonctionne aussi sans interface. `offli
 - Prépare rapports, sous-titres SRT/ASS, captures et dossier de revue Android ; protège les fichiers originaux des écrasements.
 - Refuse de qualifier comme publiable une simple démonstration synthétique.
 
-**Limites :** ce logiciel **ne génère pas** une nouvelle influenceuse photoréaliste, ne synthétise pas une nouvelle voix, ne garantit pas le lip-sync phonétique, ne vérifie pas automatiquement la marque sur le flacon, ni les droits commerciaux, et ne publie pas sur TikTok. Il travaille avec des rushs d'influenceuse et des médias déjà autorisés.
+**Limites :** ce logiciel **ne génère pas** une nouvelle influenceuse photoréaliste, ne garantit pas une voix humaine indiscernable, ne garantit pas le lip-sync phonétique, ne vérifie pas automatiquement la marque sur le flacon, ni les droits commerciaux, et ne publie pas sur TikTok. Il travaille avec des rushs d'influenceuse et des médias déjà autorisés.
 
 ## Essai sans service tiers
 
@@ -74,11 +76,12 @@ python3 functional_checks_v9.py
 python3 functional_checks_v10.py
 python3 functional_checks_v11.py
 python3 functional_checks_v11_web.py   # modèle Piper requis
+python3 functional_checks_v12.py        # deux modèles locaux FR/EN requis
 ```
 
 Test navigateur V8 facultatif (Playwright, Chromium installé séparément) : `python3 browser_smoke_v8.py`. Dans notre environnement de contrôle géré, Chromium interdit les navigations réseau : le test injecte les pages et fait passer les appels HTTP au vrai serveur via une passerelle Python ; les contrôles JavaScript et les API sont exercés, mais pas la lecture média réseau native de Chromium. Le test HTTP V8 couvre séparément les URL de lecture signées et les réponses `Range`.
 
-Documentation détaillée : [PROCESS_V6.md](PROCESS_V6.md), [PROCESS_V7.md](PROCESS_V7.md), [PROCESS_V8.md](PROCESS_V8.md) [PROCESS_V9.md](PROCESS_V9.md), [PROCESS_V10.md](PROCESS_V10.md) et [PROCESS_V11.md](PROCESS_V11.md).
+Documentation détaillée : [PROCESS_V6.md](PROCESS_V6.md), [PROCESS_V7.md](PROCESS_V7.md), [PROCESS_V8.md](PROCESS_V8.md) [PROCESS_V9.md](PROCESS_V9.md), [PROCESS_V10.md](PROCESS_V10.md), [PROCESS_V11.md](PROCESS_V11.md) et [PROCESS_V12.md](PROCESS_V12.md).
 
 ## Gratuit par défaut
 
