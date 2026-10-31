@@ -13,3 +13,10 @@ examples/demo_media/
 my_project.json
 approvals.json
 ugc_projects/
+
+# Private installer secrets and local user content
+.env
+.env.*
+!.env.example
+ugc-studio-data/
+ugc-studio-backup*.tar.gz
