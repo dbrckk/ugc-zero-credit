@@ -29,6 +29,7 @@ from subtitle_import import parse_srt
 from studio_scheduling import admission, is_active
 from offline_presenter import clean_text, synthesize
 from voice_catalog import configure_voices, pick_voice, available_languages
+from narrated_short import clean_title, inspect_narration, inspect_photos, render_short, MAX_IMAGES
 
 ROOT = Path(__file__).resolve().parent
 UI = ROOT / "studio_web"
@@ -368,7 +369,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self.error_response(401, "Lien expiré ou accès refusé")
                 project = safe_project(self.server.root, project_id)
                 if category == "outputs":
-                    if leaf not in {"final.mp4", "preview.mp4", "final.srt", "preview.srt", "final.qa.json", "preview.qa.json", "final.report.json", "preview.report.json"}:
+                    if leaf not in {"final.mp4", "preview.mp4", "final.srt", "preview.srt", "final.qa.json", "preview.qa.json", "final.report.json", "preview.report.json", "narrated.mp4", "narrated_preview.mp4", "narrated.report.json", "narrated_preview.report.json"}:
                         return self.error_response(404, "Fichier absent")
                     candidate = project / "renders" / leaf
                 else:
@@ -502,6 +503,66 @@ class Handler(BaseHTTPRequestHandler):
                                                          "error": "Échec de génération vocale ; consulter les journaux privés"}
                     self.server.executor.submit(work_voice)
                     return self.json_response(202, {"ok": True, "status": "queued", "kind": "voice", "language": lang})
+                if action == "narrated":
+                    request = self.json_request()
+                    if not isinstance(request, dict):
+                        raise ValueError("Formulaire de Short narré invalide")
+                    if request.get("confirm_image_rights") is not True or request.get("claims_verified") is not True:
+                        return self.error_response(400, "Confirmer les droits des photos et l'exactitude du titre")
+                    preview = request.get("preview", False)
+                    if type(preview) is not bool:
+                        raise ValueError("Aperçu invalide")
+                    title = clean_title(request.get("title"))
+                    photos = request.get("images")
+                    if not isinstance(photos, list) or not 1 <= len(photos) <= MAX_IMAGES:
+                        raise ValueError("Sélectionner 1 à 6 photos")
+                    if len(photos) != len(set(str(v) for v in photos)):
+                        raise ValueError("Photos en doublon")
+                    media = json.loads((project / "media.json").read_text(encoding="utf-8"))
+                    indexed = {item["file"]: item for item in media}
+                    audio_name = request.get("audio")
+                    voice = indexed.get(audio_name) if isinstance(audio_name, str) else None
+                    if not voice or voice.get("generated_by") != "piper_local" or voice.get("type") != "audio":
+                        raise ValueError("Générer d'abord une narration Piper dans le projet")
+                    narration = safe_uploaded_file(project, audio_name)
+                    narration_info = inspect_narration(narration, voice.get("voice_sha256"))
+                    image_paths = []
+                    for name in photos:
+                        if not isinstance(name, str) or name not in indexed or indexed[name].get("type") != "image":
+                            raise ValueError("Utiliser uniquement des photos importées dans ce projet")
+                        image_paths.append(safe_uploaded_file(project, name))
+                    inspect_photos(image_paths)
+                    if not (project / "renders").is_dir():
+                        raise FileNotFoundError("Dossier de rendu manquant")
+                    with self.server.jobs_lock:
+                        decision = admission(self.server.jobs, pid)
+                        if decision == "already_running":
+                            return self.error_response(409, "Un travail existe déjà pour ce projet")
+                        if decision == "server_busy":
+                            return self.error_response(429, "Serveur occupé : réessayer après les rendus")
+                        self.server.jobs[pid] = {"status": "queued", "kind": "narrated",
+                                                 "preview": preview, "language": narration_info["language"]}
+                    output = project / "renders" / ("narrated_preview.mp4" if preview else "narrated.mp4")
+                    def work_narrated():
+                        with self.server.jobs_lock:
+                            self.server.jobs[pid] = {"status": "running", "kind": "narrated",
+                                                     "preview": preview, "language": narration_info["language"]}
+                        try:
+                            report = render_short(image_paths, narration, output,
+                                title=title, narration_sha=narration_info["sha256"],
+                                image_rights_confirmed=True, claims_verified=True,
+                                preview=preview)
+                            with self.server.jobs_lock:
+                                self.server.jobs[pid] = {"status": "completed", "kind": "narrated",
+                                    "preview": preview, "output": output.name,
+                                    "duration": report["duration"], "language": report["language"]}
+                        except Exception as exc:
+                            with self.server.jobs_lock:
+                                self.server.jobs[pid] = {"status": "failed", "kind": "narrated",
+                                    "preview": preview, "error": "Échec du Short narré : " + str(exc)[-650:]}
+                    self.server.executor.submit(work_narrated)
+                    return self.json_response(202, {"ok": True, "kind": "narrated",
+                        "status": "queued", "language": narration_info["language"]})
                 if action == "render":
                     inp = self.json_request()
                     if type(inp.get("preview", False)) is not bool:
