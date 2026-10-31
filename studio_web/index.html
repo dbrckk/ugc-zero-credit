@@ -17,7 +17,18 @@
  <div class="actions"><button id="voiceGenerate" class="secondary" disabled>Générer la narration</button></div>
  <p class="hint">Après génération, écouter le WAV dans la bibliothèque de médias. Il ne peut pas être utilisé comme clip parlant sans vidéo synchronisée.</p>
  </section>
- <section class="panel hidden" id="editorPanel"><h2>5. Préparer la publicité</h2>
+ <section class="panel hidden" id="narratedPanel">
+ <h2>5. Short narré — photos + voix FR / EN</h2>
+ <p class="hint">Produit une vraie vidéo verticale avec tes photos et un WAV Piper du projet. Les photos restent visibles sans visage fictif ni fausse synchronisation labiale.</p>
+ <div class="grid-two"><label>Titre exact du produit (48 caractères max)<input id="shortTitle" maxlength="48" placeholder="Ex. Ma montre automatique"></label>
+ <label>Voix générée<select id="shortAudio"></select></label></div>
+ <label>Photos utilisées (1 à 6, dans l'ordre ci-dessous)</label><div id="shortImages" class="short-images"></div>
+ <label class="inline-check"><input id="shortRights" type="checkbox"> Je confirme posséder les droits de toutes les photos sélectionnées.</label>
+ <label class="inline-check"><input id="shortClaims" type="checkbox"> Je confirme le titre et toute allégation visuelle. Je contrôlerai la vidéo avant publication.</label>
+ <p class="fineprint">Mention affichée dans la vidéo : PUBLICITÉ · CONTENU GÉNÉRÉ AVEC IA. Aucun sous-titre mot à mot inventé.</p>
+ <div class="actions"><button id="shortPreview" class="secondary">Aperçu rapide</button><button id="shortRender" class="primary">Créer le Short 1080 × 1920</button></div>
+ </section>
+ <section class="panel hidden" id="editorPanel"><h2>6. Préparer la publicité avec présentatrice</h2>
  <div class="grid-two"><label>Nom du produit<input id="productName" placeholder="Produit exact"></label><label>Image de référence<select id="productRef"></select></label></div>
  <label>Sources vérifiables des allégations (une URL HTTPS par ligne)<textarea id="evidence" rows="2" placeholder="https://site-officiel.exemple/... (facultatif)"></textarea></label>
  <label class="inline-check"><input type="checkbox" id="claims"> Je confirme avoir vérifié les allégations produit et les droits des médias utilisés.</label>
@@ -27,6 +38,6 @@
  <div class="grid-two"><label>Musique facultative<select id="music"></select></label><label>Volume musique (0 à 0,30)<input type="number" id="musicVolume" min="0" max="0.3" step="0.01" value="0.12"></label><label>Droits de la musique<select id="musicRights"><option value="">Déclarer les droits…</option><option value="owned">Musique que je possède</option><option value="ai_generated">Générée avec droits</option><option value="licensed">Licence tierce</option></select></label><label>Référence de licence (si tierce)<input id="musicLicense" placeholder="URL ou référence documentée"></label></div>
  <div class="actions"><button id="save">Enregistrer et vérifier</button><button class="secondary" id="preview">Aperçu léger</button><button class="primary" id="render">Exporter 1080 × 1920</button></div>
  </section>
- <section class="panel hidden" id="resultPanel"><h2>6. Vérification et livraison</h2><p id="jobStatus" class="hint">Aucun export lancé.</p><div id="warnings" class="warnings"></div><div id="outputs" class="outputgrid"></div><video id="video" playsinline controls preload="metadata" class="hidden"></video><p class="fineprint">La synchronisation source→export est contrôlée ; la synchronisation phonème/lèvres ne peut pas être garantie automatiquement. Consulte aussi les rapports QA avant publication.</p></section>
+ <section class="panel hidden" id="resultPanel"><h2>7. Vérification et livraison</h2><p id="jobStatus" class="hint">Aucun export lancé.</p><div id="warnings" class="warnings"></div><div id="outputs" class="outputgrid"></div><video id="video" playsinline controls preload="metadata" class="hidden"></video><p class="fineprint">La synchronisation source→export est contrôlée ; la synchronisation phonème/lèvres ne peut pas être garantie automatiquement. Consulte aussi les rapports QA avant publication.</p></section>
  <div id="message" class="message" aria-live="polite"></div>
 </main><footer>UGC Zero Credit · Interface locale · Aucun service vidéo IA externe</footer><script defer src="/studio.js"></script></body></html>

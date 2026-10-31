@@ -11,7 +11,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1
 
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates ffmpeg espeak-ng libgomp1 tini \
+ && apt-get install -y --no-install-recommends ca-certificates ffmpeg espeak-ng libgomp1 tini fonts-dejavu-core \
  && rm -rf /var/lib/apt/lists/*
 
 # Pin the independently versioned open-source TTS runtime.

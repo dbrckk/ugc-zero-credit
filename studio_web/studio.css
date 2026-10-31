@@ -3,3 +3,8 @@
 @media(max-width:600px){.top{flex-direction:column}.grid-two,.card-fields{grid-template-columns:1fr}.grid-three{grid-template-columns:1fr 1fr}.panel{padding:16px}.formline>label{flex:1 1 100%}.formline>button{width:100%}.actions button{flex:1 1 100%}.sectionline{flex-wrap:wrap}}
 
 .media-item audio{display:block;width:100%;margin-top:10px}
+
+.short-images{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:10px;margin:10px 0}
+.short-photo{display:flex;align-items:center;gap:9px;min-height:65px;background:#25212d;border:1px solid #4b4050;border-radius:12px;padding:8px;overflow-wrap:anywhere}
+.short-photo img{width:54px;height:54px;object-fit:contain;flex-shrink:0;background:#14121c;border-radius:7px}
+.short-photo span{font-size:.75rem;word-break:break-word}.short-photo input{width:20px;height:20px;flex-shrink:0}

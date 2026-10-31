@@ -1,0 +1,66 @@
+name: V14 real narrated photo Shorts — local CPU Piper plus FFmpeg
+on:
+  push:
+    branches: [feat/v14-narrated-photo-shorts]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install real FFmpeg, font and pinned Piper CPU
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg fonts-dejavu-core
+          python -m pip install 'piper-tts==1.8.0'
+      - name: Download public FR/EN test voices only
+        run: |
+          python -m piper.download_voices fr_FR-siwis-medium en_US-lessac-medium --data-dir "$RUNNER_TEMP/ugc-voices"
+          test -s "$RUNNER_TEMP/ugc-voices/en_US-lessac-medium.onnx"
+          test -s "$RUNNER_TEMP/ugc-voices/fr_FR-siwis-medium.onnx"
+      - name: Validate real audio and Full-HD MP4, then older functional regressions
+        env:
+          UGC_TEST_PIPER_MODEL: ${{ runner.temp }}/ugc-voices/fr_FR-siwis-medium.onnx
+          UGC_TEST_PIPER_MODEL_EN: ${{ runner.temp }}/ugc-voices/en_US-lessac-medium.onnx
+        run: |
+          python -m compileall -q studio_web.py narrated_short.py functional_checks_v14.py
+          node --check studio_web/studio.js
+          python functional_checks_v14.py
+          python functional_checks_v12.py
+          python functional_checks_v11_web.py
+          python functional_checks_v10.py
+          python functional_checks_v9.py
+      - name: Build real private Docker studio (two ONNX voice models)
+        run: |
+          printf '%s\n' 'UGC_STUDIO_TOKEN=v14-ci-private-long-token-for-testing-only' 'UGC_STUDIO_PORT=18787' > .env
+          chmod 600 .env
+          bash install_studio.sh
+      - name: Verify bilingual voice, Docker font, and persistent HTTP media
+        env:
+          UGC_STUDIO_TOKEN: v14-ci-private-long-token-for-testing-only
+          UGC_STUDIO_PORT: "18787"
+          UGC_V13_STATE_FILE: ${{ runner.temp }}/v14-container-state.txt
+        run: |
+          docker compose -f docker-compose.yml exec -T studio python -c "from narrated_short import FONT; assert FONT.is_file(), FONT; print('V14 DejaVu font installed inside real Docker image')"
+          python functional_checks_v13_container.py
+          docker compose -f docker-compose.yml restart studio
+          python functional_checks_v13_container.py --after-restart
+      - name: Diagnostics if container job fails
+        if: failure()
+        run: |
+          export UGC_STUDIO_TOKEN=v14-ci-private-long-token-for-testing-only
+          export UGC_STUDIO_PORT=18787
+          docker compose -f docker-compose.yml ps || true
+          docker compose -f docker-compose.yml logs --tail 80 || true
+      - name: Clean up Docker containers, preserve data volume
+        if: always()
+        run: |
+          export UGC_STUDIO_TOKEN=v14-ci-private-long-token-for-testing-only
+          export UGC_STUDIO_PORT=18787
+          docker compose -f docker-compose.yml down || true

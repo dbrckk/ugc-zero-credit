@@ -30,6 +30,12 @@ Ouvrir `http://127.0.0.1:8787` sur Android, renseigner le jeton, importer les m�
 
 **Sécurité :** accès loopback seulement, tunnel SSH nécessaire si le serveur est distant. **Ne pas exposer ce serveur directement à Internet.** Le rendu consomme CPU, espace disque et électricité, mais aucun crédit IA distant. Voir [PROCESS_V8.md](PROCESS_V8.md) pour toutes les instructions et limites.
 
+## V14 — transformer une narration FR/EN et des photos en vrai Short 9:16
+
+Depuis Android, générer un WAV Piper (FR ou EN), importer 1–6 photos autorisées, puis utiliser **Short narré — photos + voix FR / EN**. Le serveur encode réellement un MP4 H.264/AAC avec photos contenues sur fond flou, zooms progressifs, fondus, titre et mention « PUBLICITÉ · CONTENU GÉNÉRÉ AVEC IA ». L'aperçu et l'export 1080 × 1920 sont accessibles dans la bibliothèque de rendus, sans API payante. Les sorties sont décodées intégralement avant publication dans l'interface. Ce mode **n'invente ni visage, ni lip-sync, ni sous-titres horodatés** et nécessite une revue humaine.
+
+Voir [PROCESS_V14.md](PROCESS_V14.md). Ce mode est distinct des anciens montages de vidéos de présentatrice : les anciens projets et exports restent compatibles.
+
 ## V13 — installation autonome sur serveur privé (une commande)
 
 Le [guide V13](PROCESS_V13.md) fournit une installation reproductible et entièrement locale : Docker, FFmpeg, Piper CPU, voix **française et anglaise**, stockage privé persistant, jeton et démarrage automatique.
@@ -89,6 +95,7 @@ python3 functional_checks_v10.py
 python3 functional_checks_v11.py
 python3 functional_checks_v11_web.py   # modèle Piper requis
 python3 functional_checks_v12.py        # deux modèles locaux FR/EN requis
+python3 functional_checks_v14.py        # voix Piper + FFmpeg réels
 ```
 
 Test navigateur V8 facultatif (Playwright, Chromium installé séparément) : `python3 browser_smoke_v8.py`. Dans notre environnement de contrôle géré, Chromium interdit les navigations réseau : le test injecte les pages et fait passer les appels HTTP au vrai serveur via une passerelle Python ; les contrôles JavaScript et les API sont exercés, mais pas la lecture média réseau native de Chromium. Le test HTTP V8 couvre séparément les URL de lecture signées et les réponses `Range`.
