@@ -11,30 +11,45 @@ if [[ "$(uname -s)" != "Linux" ]]; then
 fi
 
 if ! command -v docker >/dev/null 2>&1; then
-  if ! command -v apt-get >/dev/null 2>&1; then
-    echo "ÉCHEC : Docker absent ; distribution non Debian/Ubuntu." >&2
-    echo "Installer Docker Engine et Docker Compose V2, puis relancer ce script." >&2
+  if ! command -v apt-get >/dev/null 2>&1 || [[ ! -f /etc/os-release ]]; then
+    echo "ÉCHEC : distribution non Debian/Ubuntu ; installer Docker Engine + Compose V2." >&2
     exit 2
   fi
-  echo "Docker absent : installation automatique avec le gestionnaire apt."
+  # Official signed Docker apt repository is supported on current Debian/Ubuntu.
+  # Don't remove or replace an existing Docker installation.
+  . /etc/os-release
+  if [[ "${ID:-}" != "debian" && "${ID:-}" != "ubuntu" ]]; then
+    echo "ÉCHEC : installation système automatique réservée à Debian/Ubuntu." >&2
+    exit 2
+  fi
+  distro="$ID"
+  codename="${UBUNTU_CODENAME:-${VERSION_CODENAME:-}}"
+  if [[ ! "$codename" =~ ^[a-z]+$ ]]; then
+    echo "ÉCHEC : version de distribution inconnue." >&2
+    exit 2
+  fi
   if [[ "$EUID" -eq 0 ]]; then
     privilege=()
   elif command -v sudo >/dev/null 2>&1; then
     privilege=(sudo)
   else
-    echo "ÉCHEC : installation Docker nécessite sudo ou root." >&2
+    echo "ÉCHEC : installation de Docker nécessite sudo ou root." >&2
     exit 2
   fi
+  echo "Installation via le dépôt apt officiel signé de Docker ($distro/$codename)."
   "${privilege[@]}" apt-get update -qq
-  "${privilege[@]}" apt-get install -y docker.io
-  if ! "${privilege[@]}" apt-get install -y docker-compose-v2; then
-    "${privilege[@]}" apt-get install -y docker-compose-plugin
-  fi
+  "${privilege[@]}" apt-get install -y ca-certificates curl
+  "${privilege[@]}" install -m 0755 -d /etc/apt/keyrings
+  "${privilege[@]}" curl -fsSL --retry 3 "https://download.docker.com/linux/$distro/gpg" -o /etc/apt/keyrings/docker.asc
+  "${privilege[@]}" chmod a+r /etc/apt/keyrings/docker.asc
+  arch="$(dpkg --print-architecture)"
+  printf 'Types: deb\nURIs: https://download.docker.com/linux/%s\nSuites: %s\nComponents: stable\nArchitectures: %s\nSigned-By: /etc/apt/keyrings/docker.asc\n' "$distro" "$codename" "$arch" | "${privilege[@]}" tee /etc/apt/sources.list.d/docker.sources >/dev/null
+  "${privilege[@]}" apt-get update -qq
+  "${privilege[@]}" apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
   if command -v systemctl >/dev/null 2>&1; then
     "${privilege[@]}" systemctl enable --now docker
   fi
 fi
-
 if docker info >/dev/null 2>&1; then
   docker_cli=(docker)
 elif command -v sudo >/dev/null 2>&1 && sudo docker info >/dev/null 2>&1; then
