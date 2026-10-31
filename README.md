@@ -38,6 +38,10 @@ La V15 réduit la taille de la mention obligatoire sur les aperçus 360 × 640 p
 
 Titres de 1–4 lignes adaptés aux écrans mobiles, fond flouté sobre, cadre discret autour du produit, repère de séquence et variations légères de zoom/panoramique. La photo n'est pas recadrée et les déclarations publicitaires restent affichées. Les tests construisent de vrais MP4 et sauvegardent des captures PNG de contrôle ; voir [PROCESS_V16.md](PROCESS_V16.md).
 
+## V18 — animation du titre et progression réelle
+
+Le Short produit (FR/EN) dispose désormais d'un **titre animé à l'apparition** (glissement et fondu de 500 ms) et d'un **indicateur de progression temporel de 20 segments**, encodés image par image par FFmpeg. Ils ne sont pas un effet simulé dans l'interface : ils figurent dans le MP4 9:16, en aperçu comme en Full-HD. Une vérification fonctionnelle lit les pixels de deux instants du vrai MP4 et vérifie la progression. Les mentions IA, les photos d'origine, le contrôle des droits et le son restent inchangés.
+
 ## V14 — transformer une narration FR/EN et des photos en vrai Short 9:16
 
 Depuis Android, générer un WAV Piper (FR ou EN), importer 1–6 photos autorisées, puis utiliser **Short narré — photos + voix FR / EN**. Le serveur encode réellement un MP4 H.264/AAC avec photos contenues sur fond flou, zooms progressifs, fondus, titre et mention « PUBLICITÉ · CONTENU GÉNÉRÉ AVEC IA ». L'aperçu et l'export 1080 × 1920 sont accessibles dans la bibliothèque de rendus, sans API payante. Les sorties sont décodées intégralement avant publication dans l'interface. Ce mode **n'invente ni visage, ni lip-sync, ni sous-titres horodatés** et nécessite une revue humaine.
