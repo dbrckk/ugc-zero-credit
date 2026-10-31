@@ -442,9 +442,15 @@ class Handler(BaseHTTPRequestHandler):
                     cfg_file = project / "project.json"
                     if not cfg_file.is_file():
                         return self.error_response(409, "Projet non configuré")
-                    cfg = json.loads(cfg_file.read_text(encoding="utf-8"))
+                    # Validate a snapshot outside the queue lock, then compare
+                    # inside it. A concurrent save cannot silently replace the
+                    # configuration while an export is being admitted.
+                    config_snapshot = cfg_file.read_bytes()
+                    cfg = json.loads(config_snapshot.decode("utf-8"))
                     verify(cfg, project)
                     with self.server.jobs_lock:
+                        if cfg_file.read_bytes() != config_snapshot:
+                            return self.error_response(409, "Configuration modifiée pendant la vérification ; réessayer")
                         decision = admission(self.server.jobs, pid)
                         if decision == "already_running":
                             return self.error_response(409, "Un export existe déjà pour ce projet")

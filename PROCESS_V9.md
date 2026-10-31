@@ -16,3 +16,9 @@ python3 functional_checks_v8.py
 ```
 
 La suite V9 teste la logique d'admission hors ligne. La suite V8 couvre le serveur HTTP et un rendu synthétique réel. Le studio reste privé, accessible par tunnel SSH, et non adapté à une exposition HTTP publique.
+
+## Contrôle supplémentaire : configuration immuable pendant l'admission
+
+Le serveur lit et vérifie un instantané du JSON avant d'ajouter le rendu à la file. Sous `jobs_lock`, il compare cet instantané au fichier actuel. Si un enregistrement concurrent a modifié le fichier, le rendu est rejeté avec **HTTP 409** et ne démarre pas avec un formulaire périmé.
+
+Le test `functional_checks_v8.py` est étendu avec trois vrais rendus FFmpeg : il vérifie les refus 409/429, la cohérence des configurations et la récupération après achèvement. Les médias restent synthétiques et locaux. Les tests fonctionnels complets sont exécutés avant fusion sur la branche dédiée.
