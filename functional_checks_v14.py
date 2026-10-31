@@ -123,7 +123,7 @@ class V14RealEndToEnd(unittest.TestCase):
         self.assertEqual(report["status"],"REQUIRES_HUMAN_REVIEW")
         self.assertEqual(report["disclosure"],DISCLOSURE)
         self.assertEqual(report["photo_count"],2)
-        self.assertEqual(report["visual_text_layout"],"editorial_product_card_v16")
+        self.assertEqual(report["visual_text_layout"],"animated_product_card_v18")
         self.assertTrue(report["scene_counter"])
         self.assertIn(report["title_line_count"],range(1,5))
         self.assertEqual(report["language"],"en_US")
