@@ -138,9 +138,14 @@ def render_short(images: list[Path], narration: Path, output: Path, *,
         raise ValueError("Réduire le nombre de photos pour cette narration")
     with tempfile.TemporaryDirectory(prefix=".ugc-short-", dir=output.parent) as folder:
         work = Path(folder)
-        title_file = work / "title.txt"
+        # FFmpeg's drawtext may render literal newlines as missing-glyph squares.
+        # Give each title line its own textfile and drawtext layer.
+        title_files = []
+        for index, line in enumerate(formatted_title.split("\n")):
+            line_file = work / f"title_{index}.txt"
+            line_file.write_text(line, encoding="utf-8")
+            title_files.append(line_file)
         disclosure_file = work / "disclosure.txt"
-        title_file.write_text(formatted_title, encoding="utf-8")
         disclosure_file.write_text(DISCLOSURE, encoding="utf-8")
         cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-y"]
         for photo in images:
@@ -181,12 +186,18 @@ def render_short(images: list[Path], narration: Path, output: Path, *,
             previous = final
         # Responsive headlines and an always-visible disclosure.
         disclosure_size = 9 if preview else 30
-        # textfile= avoids interpolating untrusted user text into FFmpeg syntax.
+        title_layers = []
+        for index, line_file in enumerate(title_files):
+            y = int(h * .056) + index * round(title_size * 1.18)
+            title_layers.append(
+                f"drawtext=fontfile={FONT}:textfile={line_file}:"
+                f"fontcolor=white:fontsize={title_size}:"
+                f"x=(w-text_w)/2:y={y}:shadowcolor=black@0.60:"
+                f"shadowx=1:shadowy=2")
+        # Separate lines prevent missing-glyph squares; textfiles avoid injecting
+        # untrusted product names into the FFmpeg filter expression.
         filt.append(
-            f"[{previous}]drawtext=fontfile={FONT}:textfile={title_file}:"
-            f"fontcolor=white:fontsize={title_size}:"
-            f"x=(w-text_w)/2:y=h*0.056:box=1:"
-            f"boxcolor=black@0.65:boxborderw={int(w*.02)},"
+            f"[{previous}]" + ",".join(title_layers) + ","
             f"drawtext=fontfile={FONT}:textfile={disclosure_file}:"
             f"fontcolor=white:fontsize={disclosure_size}:"
             f"x=(w-text_w)/2:y=h*0.925-text_h:"
