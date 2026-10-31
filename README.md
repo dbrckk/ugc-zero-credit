@@ -1,10 +1,16 @@
 # UGC Zero Credit
 
-**Studio UGC TikTok, Reels et YouTube Shorts — V8.** Assemble et contrôle localement des vidéos d'influenceuses IA **déjà existantes**, en conservant leur voix native. Aucune API de génération payante, aucun jeton d'inférence consommé.
+**Studio UGC TikTok, Reels et YouTube Shorts — V9.** Assemble et contrôle localement des vidéos d'influenceuses IA **déjà existantes**, en conservant leur voix native. Aucune API de génération payante, aucun jeton d'inférence consommé.
 
-## Nouveau : studio web accessible depuis Android
+## Studio web Android et fiabilité V9
 
-La V8 ajoute une interface pour créer des projets, transférer des vidéos parlées, des photos de produit, une musique facultative et des sous-titres SRT, gérer le storyboard, effectuer des vérifications, prévisualiser et exporter une publicité verticale 9:16.
+Le studio web V8 permet de créer des projets, importer des vidéos parlées, images de produit, musiques et sous-titres SRT, gérer le storyboard, prévisualiser et exporter des vidéos 9:16. La **V9** sécurise les rendus sur les petits serveurs CPU :
+
+- Une seule vidéo est encodée à la fois, avec au plus une deuxième en attente.
+- Les demandes supplémentaires sont refusées (HTTP 429), ainsi que les rendus doublons sur un même projet (HTTP 409).
+- La configuration d'un projet ne peut pas être modifiée pendant l'export.
+- Un snapshot de configuration est revérifié juste avant son admission, afin de refuser un projet modifié pendant la vérification.
+- Tests de concurrence avec de vrais rendus FFmpeg, sans API IA payante. Voir [PROCESS_V9.md](PROCESS_V9.md).
 
 Démarrer sur un serveur Linux disposant de Python 3.10+ et de FFmpeg/FFprobe :
 
@@ -57,11 +63,12 @@ python3 functional_checks_v5.py
 python3 functional_checks_v6.py
 python3 functional_checks_v7.py
 python3 functional_checks_v8.py
+python3 functional_checks_v9.py
 ```
 
 Test navigateur V8 facultatif (Playwright, Chromium installé séparément) : `python3 browser_smoke_v8.py`. Dans notre environnement de contrôle géré, Chromium interdit les navigations réseau : le test injecte les pages et fait passer les appels HTTP au vrai serveur via une passerelle Python ; les contrôles JavaScript et les API sont exercés, mais pas la lecture média réseau native de Chromium. Le test HTTP V8 couvre séparément les URL de lecture signées et les réponses `Range`.
 
-Documentation détaillée : [PROCESS_V6.md](PROCESS_V6.md), [PROCESS_V7.md](PROCESS_V7.md), [PROCESS_V8.md](PROCESS_V8.md).
+Documentation détaillée : [PROCESS_V6.md](PROCESS_V6.md), [PROCESS_V7.md](PROCESS_V7.md), [PROCESS_V8.md](PROCESS_V8.md) et [PROCESS_V9.md](PROCESS_V9.md).
 
 ## Gratuit par défaut
 
