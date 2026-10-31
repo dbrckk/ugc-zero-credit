@@ -88,7 +88,35 @@ class ProductPictureInPictureV10(unittest.TestCase):
         self.assertIn(changed["overlays"][0],proposed["overlays"])
         self.assertTrue(report["human_review_required"])
 
-    def test_05_ffmpeg_actual_card_and_native_audio(self):
+    def test_05_web_form_persists_picture_in_picture_layout(self):
+        """Real browser draft -> server config -> audited project contract."""
+        import shutil
+        from studio_web import assemble_config
+        with tempfile.TemporaryDirectory(prefix="ugc-v10-ui-") as scratch:
+            project=Path(scratch)
+            (project/"media").mkdir()
+            shutil.copy2(self.root/"demo_media"/"presentation_demo.mp4",
+                         project/"media"/"voice.mp4")
+            shutil.copy2(self.root/"demo_media"/"produit.png",
+                         project/"media"/"product.png")
+            request={"product":{"name":"DEMO SYNTHÉTIQUE","claims_verified":True,
+                      "product_reference":"media/product.png","evidence_urls":[]},
+                     "talking_clips":[{"file":"media/voice.mp4","source_in":0,
+                                       "duration":4,"rights":"owned","smart_crop":"off"}],
+                     "overlays":[{"file":"media/product.png","start":1.0,
+                                  "duration":1.2,"fade":.1,"rights":"owned",
+                                  "motion":"push_in","layout":"pip_right"}],
+                     "srt_assignments":[]}
+            config, info=assemble_config(project,request)
+            self.assertEqual(config["overlays"][0]["layout"],"pip_right")
+            self.assertEqual(info["clips"],1)
+            verified=verify(config,project)
+            self.assertEqual(verified["total_duration"],4)
+            request["overlays"][0]["layout"]="not_a_mode"
+            with self.assertRaises(ValueError):
+                assemble_config(project,request)
+
+    def test_06_ffmpeg_actual_card_and_native_audio(self):
         with tempfile.TemporaryDirectory(prefix="ugc-v10-render-") as scratch:
             workspace=Path(scratch)
             original=copy.deepcopy(self.config)
