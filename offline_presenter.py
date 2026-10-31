@@ -24,8 +24,12 @@ MODEL_REQUIRED = (
     "models/musetalkV15/unet.pth",
     "models/musetalkV15/musetalk.json",
     "models/sd-vae/config.json",
+    "models/sd-vae/diffusion_pytorch_model.bin",
     "models/whisper/config.json",
+    "models/whisper/pytorch_model.bin",
     "models/whisper/preprocessor_config.json",
+    "models/face-parse-bisent/79999_iter.pth",
+    "models/face-parse-bisent/resnet18-5c106cde.pth",
 )
 IMAGE_FORMATS = frozenset({".png", ".jpg", ".jpeg"})
 
@@ -228,11 +232,17 @@ def presenter(*, text: str, model: Path, image: Path, musetalk: Path,
                "--version", "v15", "--fps", "25", "--batch_size", "4",
                "--ffmpeg_path", str(Path(shutil.which("ffmpeg") or "/usr/bin/ffmpeg").parent),
                "--output_vid_name", "presenter.mp4"]
-        completed = subprocess.run(
-            cmd, cwd=root, text=True, capture_output=True, timeout=1800,
-            env={**os.environ, "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1",
-                 "HF_DATASETS_OFFLINE": "1", "WANDB_MODE": "offline"},
-        )
+        # MuseTalk upstream may use a shared 'temp.mp4' in its working folder.
+        # Serialize all invocations made through this adapter to avoid overlap.
+        import fcntl
+        with (root / ".ugc_presenter.lock").open("a+") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            completed = subprocess.run(
+                cmd, cwd=root, text=True, capture_output=True, timeout=1800,
+                env={**os.environ, "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1",
+                     "HF_DATASETS_OFFLINE": "1", "WANDB_MODE": "offline"},
+            )
+            fcntl.flock(lock, fcntl.LOCK_UN)
         candidate = render_dir / "v15" / "presenter.mp4"
         if completed.returncode or not candidate.is_file():
             raise RuntimeError("MuseTalk n'a pas produit de fichier vidéo : " + (completed.stderr or completed.stdout)[-1800:])

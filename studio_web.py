@@ -213,6 +213,13 @@ class Studio(ThreadingHTTPServer):
         super().__init__(address, handler)
         self.voice_model = voice_model.expanduser().resolve() if voice_model else None
         self.voice_license_ref = voice_license_ref
+        if self.voice_model:
+            if len(voice_license_ref.strip()) < 8:
+                raise ValueError("Référence de droits Piper absente : impossible d'activer la voix")
+            try:
+                import piper  # fail early, rather than enable a broken Android button
+            except ImportError as exc:
+                raise RuntimeError("Moteur Piper non installé : pip install piper-tts") from exc
         self.voice_language = inspect_piper_model(self.voice_model)["language"] if self.voice_model else ""
         self.root = root.resolve()
         self.root.mkdir(parents=True, exist_ok=True, mode=0o700)

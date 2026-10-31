@@ -102,6 +102,14 @@ class RealMobileVoiceTests(unittest.TestCase):
         self.assertFalse(meta["human_lip_sync_proven"])
         # A completed voice job frees the render queue slot.
         self.assertEqual(self.call(endpoint,method="POST",payload=payload)[0],202)
+        # Ensure the teardown does not delete a project during active synthesis.
+        deadline=time.monotonic()+75
+        while time.monotonic()<deadline:
+            _,last=self.call(f"/api/projects/{self.pid}")
+            if last["job"]["status"] in {"completed","failed"}:
+                break
+            time.sleep(.25)
+        self.assertEqual(last["job"]["status"],"completed",last["job"])
 
 
 if __name__=="__main__":

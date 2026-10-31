@@ -32,6 +32,10 @@ jobs:
           python functional_checks_v11.py
           python functional_checks_v11_web.py
           python functional_checks_v9.py
+          node --check studio_web/studio.js
+          python make_synthetic_demo.py
+          python functional_checks_v8.py
+          python functional_checks_v10.py
           python offline_presenter.py voice \
             --voice-model "$UGC_TEST_PIPER_MODEL" \
             --voice-license-ref "https://huggingface.co/rhasspy/piper-voices/blob/main/fr/fr_FR/siwis/medium/MODEL_CARD" \
