@@ -75,3 +75,18 @@ python3 functional_checks_v11.py
 ```
 
 L'exécution CI de la branche V11 peut installer Piper et télécharger **uniquement une voix française de test**, sans générateur commercial. Elle doit générer réellement un WAV et le vérifier avec FFprobe. **Le chemin MuseTalk est testé pour refuser les installations incomplètes ; aucun test vidéo MuseTalk réel n'est promis sans GPU CUDA et poids disponibles.**
+
+## Nouveau : narration depuis le studio Android
+
+Le serveur V11 peut activer la voix locale dans l'interface privée :
+
+```bash
+python3 studio_web.py --host 127.0.0.1 --port 8787 \
+  --data "$HOME/ugc-studio-data" \
+  --voice-model "$HOME/ugc-voices/fr_FR-siwis-medium.onnx" \
+  --voice-license-ref "https://huggingface.co/rhasspy/piper-voices/blob/main/fr/fr_FR/siwis/medium/MODEL_CARD"
+```
+
+Sur Android, connecter le studio par tunnel SSH comme dans `PROCESS_V8.md`. Ouvrir un projet, saisir un texte dans **Voix IA française · CPU**, confirmer les droits, puis **Générer la voix française**. Après génération, la bibliothèque présente un lecteur audio WAV. Le serveur accepte seulement deux tâches en file (un travailleur, une tâche en attente) et refuse les doublons ; il n'effectue ni génération payante ni déploiement.
+
+L'interface ne convertit pas automatiquement le WAV en présentatrice parlante. La création du MP4 labial peut être effectuée via `offline_presenter.py presenter` sur une machine GPU compatible et le résultat peut ensuite être importé comme média vidéo.
