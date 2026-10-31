@@ -12,3 +12,4 @@ functional_results_v*.json
 examples/demo_media/
 my_project.json
 approvals.json
+ugc_projects/
