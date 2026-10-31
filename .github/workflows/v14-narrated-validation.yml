@@ -36,3 +36,31 @@ jobs:
           python functional_checks_v11_web.py
           python functional_checks_v10.py
           python functional_checks_v9.py
+      - name: Build real private Docker studio (two ONNX voice models)
+        run: |
+          printf '%s\n' 'UGC_STUDIO_TOKEN=v14-ci-private-long-token-for-testing-only' 'UGC_STUDIO_PORT=18787' > .env
+          chmod 600 .env
+          bash install_studio.sh
+      - name: Verify bilingual voice, Docker font, and persistent HTTP media
+        env:
+          UGC_STUDIO_TOKEN: v14-ci-private-long-token-for-testing-only
+          UGC_STUDIO_PORT: "18787"
+          UGC_V13_STATE_FILE: ${{ runner.temp }}/v14-container-state.txt
+        run: |
+          docker compose -f docker-compose.yml exec -T studio python -c "from narrated_short import FONT; assert FONT.is_file(), FONT; print('V14 DejaVu font installed inside real Docker image')"
+          python functional_checks_v13_container.py
+          docker compose -f docker-compose.yml restart studio
+          python functional_checks_v13_container.py --after-restart
+      - name: Diagnostics if container job fails
+        if: failure()
+        run: |
+          export UGC_STUDIO_TOKEN=v14-ci-private-long-token-for-testing-only
+          export UGC_STUDIO_PORT=18787
+          docker compose -f docker-compose.yml ps || true
+          docker compose -f docker-compose.yml logs --tail 80 || true
+      - name: Clean up Docker containers, preserve data volume
+        if: always()
+        run: |
+          export UGC_STUDIO_TOKEN=v14-ci-private-long-token-for-testing-only
+          export UGC_STUDIO_PORT=18787
+          docker compose -f docker-compose.yml down || true
