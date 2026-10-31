@@ -153,17 +153,32 @@ def render_short(images: list[Path], narration: Path, output: Path, *,
         for photo in images:
             cmd += ["-loop", "1", "-framerate", str(fps), "-t", f"{segment + .12:.4f}", "-i", str(photo)]
         cmd += ["-i", str(narration)]
+        # A two-plane product stage: photo card and blurred background have
+        # independent trajectories, unlike zooming a flattened still image.
+        # A short entry and alpha reveal is visible in the encoded MP4.
+        frame_pad = max(8, round(w * 0.022))
+        reveal_seconds = min(0.48, max(0.28, segment * 0.30))
+        entrance_seconds = min(0.72, max(0.32, segment * 0.50))
         filt = []
         for i in range(len(images)):
-            # Soft blurred background retains full portrait canvas; the actual
-            # photo remains centered/contained, never misleadingly cropped.
+            direction = 1 if i % 2 == 0 else -1
+            entry_shift = direction * int(w * .30)
+            drift = direction * int(w * .016)
+            # Keep complete product photos, including their edges and logos.
+            # The padded ivory perimeter moves with the photo card.
             filt.append(
                 f"[{i}:v]split=2[b{i}][f{i}];"
                 f"[b{i}]scale={w}:{h}:force_original_aspect_ratio=increase,"
                 f"crop={w}:{h},boxblur=6:1,eq=brightness=-0.20[bg{i}];"
                 f"[f{i}]scale={int(w * .84)}:{int(h * .57)}:force_original_aspect_ratio=decrease,"
-                f"format=rgba,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:color=black@0[fg{i}];"
-                f"[bg{i}][fg{i}]overlay=shortest=1:format=auto,"
+                f"format=rgba,pad=iw+{frame_pad}:ih+{frame_pad}:"
+                f"{frame_pad//2}:{frame_pad//2}:color=0xF6EFE6@0.93,"
+                f"fade=t=in:st=0:d={reveal_seconds:.3f}:alpha=1[fg{i}];"
+                f"[bg{i}][fg{i}]overlay="
+                f"x='(W-w)/2{entry_shift:+d}*max(0\\,1-t/{entrance_seconds:.3f})*"
+                f"max(0\\,1-t/{entrance_seconds:.3f}){drift:+d}*sin(t*0.85)':"
+                f"y='(H-h)/2+{int(h*.018)}*sin(t*0.75+{i})':"
+                f"eval=frame:shortest=1:format=auto,"
                 f"format=yuv420p,zoompan=z='min(zoom+0.00032,1.070)':"
                 f"x='(iw-iw/zoom)*{0.30 if i % 2 == 0 else 0.70}':"
                 f"y='(ih-ih/zoom)*{0.63 if i % 2 == 0 else 0.37}':"
@@ -180,10 +195,14 @@ def render_short(images: list[Path], narration: Path, output: Path, *,
                 f"x={int(w*.07)}:y={int(h*.825)},"
                 f"format=yuv420p[v{i}]")
         previous = "v0"
+        transition_styles = []
         for i in range(1, len(images)):
             final = f"x{i}"
             offset = i * (segment - transition)
-            filt.append(f"[{previous}][v{i}]xfade=transition=fade:"
+            # Slide direction follows the entering photo's side.
+            style = "smoothright" if i % 2 else "smoothleft"
+            transition_styles.append(style)
+            filt.append(f"[{previous}][v{i}]xfade=transition={style}:"
                         f"duration={transition:.3f}:offset={offset:.5f}[{final}]")
             previous = final
         # Responsive headlines animate into place in the opening half-second.
@@ -252,7 +271,12 @@ def render_short(images: list[Path], narration: Path, output: Path, *,
         if decoded.returncode:
             raise RuntimeError("Short non décodable complètement : " + decoded.stderr[-600:])
         report = {
-            "visual_text_layout": "animated_product_card_v18",
+            "visual_text_layout": "cinematic_parallax_product_stage_v19",
+            "photo_motion": "independent_foreground_entry_and_background_zoom",
+            "photo_reveal_ms": round(reveal_seconds * 1000),
+            "photo_entrance_ms": round(entrance_seconds * 1000),
+            "photo_frame_px": frame_pad,
+            "transition_styles": transition_styles,
             "animated_headline": "slide_fade_500ms",
             "animated_progress_segments": 20,
             "title_line_count": title_lines, "title_font_size": title_size,
