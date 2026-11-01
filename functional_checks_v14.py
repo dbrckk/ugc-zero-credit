@@ -368,6 +368,33 @@ class V14RealEndToEnd(unittest.TestCase):
         self.assertIn(b"generatePresenter", js)
         self.assertIn(b"refreshPresenterReadiness", js)
 
+    def test_05_real_presenter_video_upload_is_private_and_playable(self):
+        """Real motion clip goes through the authenticated Android media pipeline."""
+        with tempfile.TemporaryDirectory(prefix="ugc-v23-upload-") as temp:
+            clip = Path(temp) / "presenter.mp4"
+            subprocess.run(
+                ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+                 "-f", "lavfi", "-i", "testsrc2=s=320x512:r=25",
+                 "-t", "1.25", "-c:v", "libx264", "-preset", "ultrafast",
+                 "-pix_fmt", "yuv420p", str(clip)],
+                capture_output=True, check=True, timeout=75)
+            path = "/api/projects/" + self.pid + "/media?filename=presenter_video.mp4"
+            status, result = self.call(path, "POST", clip.read_bytes(),
+                                       headers={"Content-Type": "video/mp4"})
+            self.assertEqual(status, 201, result)
+            self.assertEqual(result["media"]["type"], "video")
+            self.assertGreaterEqual(result["media"]["duration"], 1)
+            status, project = self.call("/api/projects/" + self.pid)
+            self.assertEqual(status, 200)
+            generated = next(m for m in project["media"]
+                             if m["file"] == "media/presenter_video.mp4")
+            self.assertTrue(generated["url"].startswith("/api/projects/"))
+            self.assertEqual(self.call("/api/projects/" + self.pid +
+                                      "/media/presenter_video.mp4", auth=False)[0], 401)
+            status, actual = self.call(generated["url"], auth=False)
+            self.assertEqual(status, 200)
+            self.assertEqual(actual, clip.read_bytes())
+
     def test_06_legacy_ui_and_private_status_unchanged(self):
         code,page=self.call("/",auth=False)
         self.assertEqual(code,200)
