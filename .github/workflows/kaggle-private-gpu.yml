@@ -1,0 +1,68 @@
+name: Kaggle private MuseTalk GPU — launch and verify
+on:
+  workflow_dispatch:
+    inputs:
+      kaggle_username:
+        description: 'Votre identifiant Kaggle (pas le nom affiché)'
+        required: true
+        type: string
+      private_dataset:
+        description: 'Dataset Kaggle PRIVÉ : utilisateur/slug (clip et droits déjà chargés)'
+        required: true
+        type: string
+      kernel_slug:
+        description: 'Nom du notebook Kaggle privé'
+        required: false
+        default: ugc-zero-credit-private
+        type: string
+
+permissions:
+  contents: read
+
+# One active GPU submission at a time; never cancel a run already started.
+concurrency:
+  group: kaggle-private-musetalk
+  cancel-in-progress: false
+
+jobs:
+  launch_private_gpu:
+    runs-on: ubuntu-latest
+    timeout-minutes: 155
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KAGGLE_USER: ${{ inputs.kaggle_username }}
+      PRIVATE_DATASET: ${{ inputs.private_dataset }}
+      KERNEL_SLUG: ${{ inputs.kernel_slug }}
+    steps:
+      - name: Checkout checked-in Kaggle pipeline
+        uses: actions/checkout@v4
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Ensure Kaggle token exists without printing it
+        shell: bash
+        run: |
+          if [[ -z "$KAGGLE_API_TOKEN" ]]; then
+            echo 'Ajouter KAGGLE_API_TOKEN dans Settings > Secrets and variables > Actions.'
+            exit 2
+          fi
+      - name: Install official Kaggle CLI version
+        run: python -m pip install --disable-pip-version-check 'kaggle==2.2.5'
+      - name: Launch private T4 and follow until COMPLETE or ERROR
+        shell: bash
+        run: |
+          set -euo pipefail
+          python kaggle_automate.py \
+            --user "$KAGGLE_USER" \
+            --dataset "$PRIVATE_DATASET" \
+            --kernel-slug "$KERNEL_SLUG" \
+            --wait-minutes 125 \
+            --poll-seconds 60
+      - name: Show safe result location
+        if: success()
+        shell: bash
+        run: |
+          echo "Le notebook et ses MP4 restent privés sur Kaggle."
+          echo "https://www.kaggle.com/code/$KAGGLE_USER/$KERNEL_SLUG"
+          echo "Aucun média utilisateur n'a été copié vers les artefacts GitHub."
