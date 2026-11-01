@@ -1,6 +1,6 @@
 # UGC Zero Credit
 
-**Studio UGC TikTok, Reels et YouTube Shorts — V20.** Assemble et contrôle localement des vidéos d'influenceuses IA **déjà existantes**, en conservant leur voix native. Aucune API de génération payante, aucun jeton d'inférence consommé.
+**Studio UGC TikTok, Reels et YouTube Shorts — V21.** Assemble et contrôle localement des vidéos d'influenceuses IA **déjà existantes**, en conservant leur voix native. Aucune API de génération payante, aucun jeton d'inférence consommé.
 
 ## Studio Android, rendu V10 et génération vocale locale V11
 
@@ -37,6 +37,12 @@ La V15 réduit la taille de la mention obligatoire sur les aperçus 360 × 640 p
 ## V16 — composition éditoriale des Shorts
 
 Titres de 1–4 lignes adaptés aux écrans mobiles, fond flouté sobre, cadre discret autour du produit, repère de séquence et variations légères de zoom/panoramique. La photo n'est pas recadrée et les déclarations publicitaires restent affichées. Les tests construisent de vrais MP4 et sauvegardent des captures PNG de contrôle ; voir [PROCESS_V16.md](PROCESS_V16.md).
+
+## V21 — portrait parlant optionnel depuis Android (GPU local)
+
+Le studio privé permet de sélectionner **un portrait autorisé + une narration Piper FR/EN déjà générée**, puis de demander la création d'une vidéo parlante via MuseTalk 1.5 **uniquement si une installation GPU CUDA locale est configurée**. Le WAV est réutilisé sans nouvelle synthèse. La vidéo est enregistrée comme média du projet et peut ensuite être choisie pour le montage publicitaire, sans API payante.
+
+L'écran contrôle explicitement l'autorisation du portrait, le consentement et les droits d'usage. Sur un serveur CPU sans MuseTalk, l'option est désactivée et l'API refuse la génération. Le fonctionnement GPU et la synchronisation réelle des lèvres restent à vérifier sur du matériel adéquat. Voir [PROCESS_V21.md](PROCESS_V21.md).
 
 ## V20 — changements de scène au rythme de la narration
 
