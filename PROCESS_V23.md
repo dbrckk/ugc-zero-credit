@@ -13,7 +13,7 @@ Avant le calcul GPU, la source vidéo passe par le véritable FFmpeg :
 - Format vertical ; résolution minimale de 256 pixels, durée 0,8–60 s et taille maximale de 120 Mo.
 - Correction en **25 images/s**, compression H.264 et réduction éventuelle à 720 × 1280 pour limiter mémoire, disque et temps GPU.
 - Conservation des mouvements d'origine ; la piste sonore de la vidéo d'origine est écartée.
-- La durée préparée est limitée à 30 secondes : si la voix dure plus longtemps, MuseTalk peut répéter les images du clip. Les meilleurs résultats UGC sont attendus avec un clip et une narration courts et de durées proches, idéalement 10–15 secondes.
+- La durée préparée est limitée à 15 secondes : si la voix dure plus longtemps, MuseTalk peut répéter les images du clip. Les meilleurs résultats UGC sont attendus avec un clip et une narration courts et de durées proches, idéalement 10–15 secondes.
 - Validation ffprobe des dimensions, images et fréquence d'images converties.
 
 Le manifeste de rendu précise si la source est un portrait fixe ou une vidéo animée, le SHA-256 d'origine, la fréquence source et préparée, les dimensions et la durée utilisée. Les règles V22 (audio réellement audible, durée audio/vidéo, décodage intégral, revue humaine) restent obligatoires.
