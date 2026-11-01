@@ -28,7 +28,18 @@
  <p class="fineprint">Mention affichée dans la vidéo : PUBLICITÉ · CONTENU GÉNÉRÉ AVEC IA. Aucun sous-titre mot à mot inventé.</p>
  <div class="actions"><button id="shortPreview" class="secondary">Aperçu rapide</button><button id="shortRender" class="primary">Créer le Short 1080 × 1920</button></div>
  </section>
- <section class="panel hidden" id="editorPanel"><h2>6. Préparer la publicité avec présentatrice</h2>
+ <section class="panel hidden" id="presenterPanel">
+ <h2>6. Portrait parlant — MuseTalk local (GPU)</h2>
+ <p class="hint" id="presenterAvailability">Cette option nécessite un GPU NVIDIA CUDA et MuseTalk 1.5 déjà installés sur le serveur. Elle réutilise le WAV Piper sans régénérer la voix. Aucun crédit d'API.</p>
+ <div class="grid-two"><label>Narration Piper FR/EN<select id="presenterAudio"></select></label>
+ <label>Portrait autorisé (JPEG/PNG)<select id="presenterPortrait"></select></label></div>
+ <label>Référence vérifiable de l'autorisation du portrait<input id="presenterRightsRef" maxlength="500" placeholder="Contrat / autorisation écrite / référence de licence"></label>
+ <label class="inline-check"><input id="presenterRights" type="checkbox"> Je confirme les droits du portrait et de la voix synthétisée.</label>
+ <label class="inline-check"><input id="presenterConsent" type="checkbox"> Je confirme que la personne représentée a consenti à cet usage, ou que le personnage est entièrement fictif et autorisé.</label>
+ <div class="actions"><button id="presenterGenerate" class="primary" disabled>Créer la vidéo parlante sur GPU</button></div>
+ <p class="fineprint">La vidéo obtenue reste à vérifier avant publication : mouvements des lèvres, voix, expression, fidélité du produit et droits commerciaux. Le GPU peut être indisponible même si MuseTalk est configuré.</p>
+ </section>
+ <section class="panel hidden" id="editorPanel"><h2>7. Préparer la publicité avec présentatrice</h2>
  <div class="grid-two"><label>Nom du produit<input id="productName" placeholder="Produit exact"></label><label>Image de référence<select id="productRef"></select></label></div>
  <label>Sources vérifiables des allégations (une URL HTTPS par ligne)<textarea id="evidence" rows="2" placeholder="https://site-officiel.exemple/... (facultatif)"></textarea></label>
  <label class="inline-check"><input type="checkbox" id="claims"> Je confirme avoir vérifié les allégations produit et les droits des médias utilisés.</label>
@@ -38,6 +49,6 @@
  <div class="grid-two"><label>Musique facultative<select id="music"></select></label><label>Volume musique (0 à 0,30)<input type="number" id="musicVolume" min="0" max="0.3" step="0.01" value="0.12"></label><label>Droits de la musique<select id="musicRights"><option value="">Déclarer les droits…</option><option value="owned">Musique que je possède</option><option value="ai_generated">Générée avec droits</option><option value="licensed">Licence tierce</option></select></label><label>Référence de licence (si tierce)<input id="musicLicense" placeholder="URL ou référence documentée"></label></div>
  <div class="actions"><button id="save">Enregistrer et vérifier</button><button class="secondary" id="preview">Aperçu léger</button><button class="primary" id="render">Exporter 1080 × 1920</button></div>
  </section>
- <section class="panel hidden" id="resultPanel"><h2>7. Vérification et livraison</h2><p id="jobStatus" class="hint">Aucun export lancé.</p><div id="warnings" class="warnings"></div><div id="outputs" class="outputgrid"></div><video id="video" playsinline controls preload="metadata" class="hidden"></video><p class="fineprint">La synchronisation source→export est contrôlée ; la synchronisation phonème/lèvres ne peut pas être garantie automatiquement. Consulte aussi les rapports QA avant publication.</p></section>
+ <section class="panel hidden" id="resultPanel"><h2>8. Vérification et livraison</h2><p id="jobStatus" class="hint">Aucun export lancé.</p><div id="warnings" class="warnings"></div><div id="outputs" class="outputgrid"></div><video id="video" playsinline controls preload="metadata" class="hidden"></video><p class="fineprint">La synchronisation source→export est contrôlée ; la synchronisation phonème/lèvres ne peut pas être garantie automatiquement. Consulte aussi les rapports QA avant publication.</p></section>
  <div id="message" class="message" aria-live="polite"></div>
 </main><footer>UGC Zero Credit · Interface locale · Aucun service vidéo IA externe</footer><script defer src="/studio.js"></script></body></html>
