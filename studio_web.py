@@ -426,7 +426,10 @@ class Handler(BaseHTTPRequestHandler):
                                                 "voice_language": self.server.voice_language,
                                                 "voice_languages": available_languages(self.server.voice_models),
                                                 "presenter_gpu_configured": bool(self.server.musetalk_dir and self.server.musetalk_python),
-                                                "presenter_gpu_verified": False})
+                                                "presenter_gpu_verified": bool(
+                                                    self.server.presenter_diagnostic_cache
+                                                    and time.monotonic() - self.server.presenter_diagnostic_cache[0] < 120
+                                                    and self.server.presenter_diagnostic_cache[1]["ready"])})
             if parts == ["", "api", "presenter", "readiness"]:
                 return self.json_response(200, {"ok": True, **self.server.presenter_readiness()})
             if parts == ["", "api", "projects"]:
