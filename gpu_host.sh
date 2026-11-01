@@ -108,8 +108,9 @@ fi
 token="$(tr -d '\r\n' < "$keyfile")"
 [[ "$token" =~ ^[A-Za-z0-9_-]{24,}$ ]] || fail "Jeton GPU invalide."
 export UGC_STUDIO_TOKEN_FILE="$keyfile"
+export UGC_STUDIO_TOKEN="$token"
 exec "$studio/bin/python" studio_web.py --host 127.0.0.1 --port "$port" \
-  --data "$data" --token "$token" \
+  --data "$data" \
   --voice-model-fr "$voices/fr_FR-siwis-medium.onnx" --voice-license-ref-fr "$fr_license" \
   --voice-model-en "$voices/en_US-lessac-medium.onnx" --voice-license-ref-en "$en_license" \
   --musetalk-dir "$mt" --musetalk-python "$gpu/bin/python"
