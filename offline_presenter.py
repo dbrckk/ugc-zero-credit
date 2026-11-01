@@ -228,7 +228,7 @@ def audible_audio_peak(path: Path) -> float:
         capture_output=True, text=True, timeout=150)
     if result.returncode:
         raise RuntimeError("Impossible de décoder la piste audio MuseTalk")
-    matched = re.search(r"max_volume:\\s*([-+]?\\d+(?:\\.\\d+)?) dB", result.stderr)
+    matched = re.search(r"max_volume:\s*([-+]?\d+(?:\.\d+)?) dB", result.stderr)
     if not matched or float(matched.group(1)) < -55:
         raise RuntimeError("Piste audio MuseTalk muette ou trop faible")
     return round(float(matched.group(1)), 2)
