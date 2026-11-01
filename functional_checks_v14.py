@@ -17,7 +17,7 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 from studio_web import Handler, Studio
 from narrated_short import inspect_narration, DISCLOSURE, layout_title
-from offline_presenter import inspect_video, audible_audio_peak
+from offline_presenter import inspect_video, audible_audio_peak, prepare_presenter_video
 from speech_scene_timing import plan_scenes
 
 def png(rgb, w=320, h=400):
@@ -122,6 +122,42 @@ class V14RealEndToEnd(unittest.TestCase):
                         audible_audio_peak(output)
                 else:
                     self.assertGreater(audible_audio_peak(output), -55)
+
+    def test_00_real_moving_presenter_footage_keeps_motion(self):
+        """Use real decoded FFmpeg frames: the GPU source must NOT be a photo slide."""
+        with tempfile.TemporaryDirectory(prefix="ugc-v23-motion-") as temp:
+            root = Path(temp)
+            original = root / "presenter.mp4"
+            normalized = root / "avatar.mp4"
+            subprocess.run(
+                ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+                 "-f", "lavfi", "-i", "testsrc2=s=360x640:r=12",
+                 "-t", "2.5", "-c:v", "libx264", "-preset", "ultrafast",
+                 "-pix_fmt", "yuv420p", str(original)],
+                capture_output=True, check=True, timeout=75)
+            report = prepare_presenter_video(original, normalized, voice_seconds=2.0)
+            self.assertEqual(report["source_type"], "moving_video")
+            self.assertEqual(report["source_fps"], 12.)
+            self.assertEqual(report["prepared_fps"], 25)
+            self.assertEqual((report["prepared_width"], report["prepared_height"]), (360, 640))
+            self.assertTrue(report["source_audio_replaced_with_piper"])
+            self.assertGreater(report["source_frames"], 35)
+            def frame(at):
+                result = subprocess.run(
+                    ["ffmpeg", "-hide_banner", "-loglevel", "error",
+                     "-ss", str(at), "-i", str(normalized), "-frames:v", "1",
+                     "-vf", "scale=48:80,format=rgb24", "-f", "rawvideo", "-"],
+                    capture_output=True, check=True, timeout=50)
+                self.assertEqual(len(result.stdout), 48*80*3)
+                return result.stdout
+            self.assertNotEqual(frame(.2), frame(1.2))
+            with self.assertRaisesRegex(ValueError, "MP4, MOV ou MKV"):
+                prepare_presenter_video(root / "avatar.webm", root / "no.mp4", voice_seconds=2.0)
+            with self.assertRaisesRegex(ValueError, "0,5"):
+                prepare_presenter_video(original, root / "no.mp4", voice_seconds=65.0)
+            (root / "danger.mp4").symlink_to(original)
+            with self.assertRaisesRegex(ValueError, "symbolique"):
+                prepare_presenter_video(root / "danger.mp4", root / "no.mp4", voice_seconds=2.0)
 
     def test_01_setup_and_real_english_voice(self):
         self.assertEqual(self.call("/api/projects",auth=False)[0],401)
