@@ -2,7 +2,7 @@
 const $ = id => document.getElementById(id);
 let token = '';
 try { token=sessionStorage.getItem('ugc-web-token') || ''; } catch (_) { /* Private browsers may disable storage. */ }
-let projectId = '', project = null, draft = null, busy = false, timer = null, voiceEnabled = false, voiceLanguage = '', voiceLanguages = [], presenterConfigured = false;
+let projectId = '', project = null, draft = null, busy = false, timer = null, voiceEnabled = false, voiceLanguage = '', voiceLanguages = [], presenterConfigured = false, presenterReady = false, presenterDiagnostic = '';
 const DISCLOSURE = 'PUBLICITÉ · LIEN AFFILIÉ · INFLUENCEUSE IA';
 const show = (id, yes) => $(id).classList.toggle('hidden', !yes);
 function message(text, error=false) {const el=$('message'); el.textContent=text; el.className='message '+(error?'error':'good');}
@@ -47,7 +47,7 @@ async function connect() {
 }
 async function listProjects(){const data=await api('/api/projects');const sel=$('projects');sel.replaceChildren();option(sel,'','— Sélectionner —');for(const item of data.projects)option(sel,item.id,item.name);if(projectId)sel.value=projectId;}
 async function createProject(){const name=$('projectName').value.trim();if(!name){message('Donner un nom au projet.',true);return;}try{const r=await api('/api/projects',{method:'POST',body:{name}});projectId=r.id;await listProjects();await loadProject();message('Projet créé. Commence par importer les fichiers.');}catch(e){message(e.message,true);}}
-async function loadProject(){if(!projectId)return;project=await api('/api/projects/'+projectId);draft=project.draft?structuredClone(project.draft):defaultDraft();$('projectInfo').textContent='Projet : '+project.name+' • médias stockés localement sur le serveur';show('mediaPanel',true);show('voicePanel',true);show('narratedPanel',true);show('presenterPanel',true);show('editorPanel',true);show('resultPanel',true);updateVoiceChoices();renderMedia();renderEditor();renderOutputs();updateJob();}
+async function loadProject(){if(!projectId)return;project=await api('/api/projects/'+projectId);draft=project.draft?structuredClone(project.draft):defaultDraft();$('projectInfo').textContent='Projet : '+project.name+' • médias stockés localement sur le serveur';show('mediaPanel',true);show('voicePanel',true);show('narratedPanel',true);show('presenterPanel',true);show('editorPanel',true);show('resultPanel',true);updateVoiceChoices();renderMedia();renderEditor();renderOutputs();updateJob();if(presenterConfigured)void refreshPresenterReadiness();}
 function updateVoiceChoices(){
  const select=$('voiceLanguage'),previous=select.value;
  select.replaceChildren();
@@ -92,6 +92,28 @@ function showWarnings(warnings){const w=$('warnings');w.replaceChildren();for(co
 async function uploadFiles(){if(!projectId){message('Créer un projet avant les imports.',true);return;}const files=[...$('uploadFiles').files];if(!files.length){message('Choisir un fichier.',true);return;}
  $('upload').disabled=true;try{for(let i=0;i<files.length;i++){const file=files[i];if(file.size>350*1024*1024)throw new Error('Fichier trop grand: '+file.name);$('uploadStatus').textContent=`Import ${i+1}/${files.length} : ${file.name} (${(file.size/1024/1024).toFixed(1)} Mo)`;const name=safeName(file.name);const r=await api(`/api/projects/${projectId}/media?filename=${encodeURIComponent(name)}`,{method:'POST',headers:{'Content-Type':file.type||'application/octet-stream'},body:file});project.media.push(r.media);renderMedia();}renderEditor();$('uploadFiles').value='';$('uploadStatus').textContent='Import terminé.';message(`${files.length} fichier(s) ajouté(s) avec vérification du format.`);}catch(e){message(e.message,true);}finally{$('upload').disabled=false;}}
 
+async function refreshPresenterReadiness(){
+ if(!presenterConfigured){
+  presenterReady=false;
+  presenterDiagnostic='MuseTalk GPU non configuré sur ce serveur.';
+  renderPresenterOptions();return;
+ }
+ presenterReady=false;
+ presenterDiagnostic='Vérification réelle des modèles et de CUDA en cours…';
+ renderPresenterOptions();
+ $('presenterCheck').disabled=true;
+ try{
+  const result=await api('/api/presenter/readiness');
+  presenterReady=result.ready===true;
+  presenterDiagnostic=result.message||'Diagnostic GPU inconnu';
+ }catch(error){
+  presenterReady=false;
+  presenterDiagnostic='Diagnostic indisponible : '+error.message;
+ }finally{
+  $('presenterCheck').disabled=false;
+  renderPresenterOptions();
+ }
+}
 function renderPresenterOptions(){
  if(!project)return;
  const audio=$('presenterAudio'),portrait=$('presenterPortrait');
@@ -105,14 +127,13 @@ function renderPresenterOptions(){
    option(portrait,m.file,m.file.slice(6));
  if([...audio.options].some(x=>x.value===priorAudio))audio.value=priorAudio;
  if([...portrait.options].some(x=>x.value===priorPortrait))portrait.value=priorPortrait;
- $('presenterAvailability').textContent=presenterConfigured
-  ? 'MuseTalk configuré sur ce serveur. Disponibilité réelle du GPU et des poids contrôlée à la demande ; aucune API payante.'
-  : 'MuseTalk non configuré : fonction désactivée. Une installation locale avec GPU NVIDIA CUDA est nécessaire.';
+ $('presenterAvailability').textContent=presenterDiagnostic||
+  (presenterConfigured?'Diagnostic GPU non encore effectué.':'MuseTalk non configuré : installation CUDA requise.');
  const job=project.job||{};
- $('presenterGenerate').disabled=!presenterConfigured||!audio.value||!portrait.value||['queued','running'].includes(job.status);
+ $('presenterGenerate').disabled=!presenterReady||!audio.value||!portrait.value||['queued','running'].includes(job.status);
 }
 async function generatePresenter(){
- if(!presenterConfigured){message('Configurer MuseTalk sur un serveur disposant de CUDA.',true);return;}
+ if(!presenterReady){message('Vérifier la disponibilité de MuseTalk et de CUDA avant de lancer le rendu.',true);return;}
  const audio=$('presenterAudio').value, portrait=$('presenterPortrait').value;
  const portrait_rights_ref=$('presenterRightsRef').value.trim();
  if(!audio||!portrait||portrait_rights_ref.length<8||!$('presenterRights').checked||!$('presenterConsent').checked){
@@ -182,5 +203,5 @@ async function generateVoice(){
  }catch(e){message(e.message,true);}
 }
 async function poll(){if(!projectId)return;try{const latest=await api('/api/projects/'+projectId);project.job=latest.job;project.outputs=latest.outputs;updateJob();if(['completed','failed','idle'].includes(project.job.status)){clearInterval(timer);timer=null;renderOutputs();if(project.job.kind==='presenter'&&project.job.status==='completed'){project.media=latest.media;renderMedia();message('Vidéo parlante disponible dans les médias du projet. Vérification humaine obligatoire.');}else if(project.job.kind==='voice'&&project.job.status==='completed'){project.media=latest.media;renderMedia();message('Voix '+(project.job.language==='en'?'anglaise':'française')+' générée : écouter le WAV dans la bibliothèque.');}else if(project.job.kind==='narrated'&&project.job.status==='completed')message('Short narré terminé. Visualiser les images, écouter l’audio et vérifier la publicité.');else if(project.job.status==='completed')message('Export terminé. Visionne et vérifie le fichier avant publication.');if(project.job.status==='failed')message(project.job.error||'Erreur du travail.',true);}}catch(e){message(e.message,true);}}
-function events(){ $('connect').addEventListener('click',connect);$('token').addEventListener('keydown',e=>{if(e.key==='Enter')connect()});$('create').addEventListener('click',createProject);$('projects').addEventListener('change',async e=>{projectId=e.target.value;try{await loadProject();}catch(err){message(err.message,true);}});$('upload').addEventListener('click',uploadFiles);$('addClip').addEventListener('click',()=>{const v=project.media.find(x=>x.type==='video');if(!v){message('Importer une vidéo parlée d’abord.',true);return;}collectForm();draft.talking_clips.push({file:v.file,source_in:0,duration:Math.max(.2,+(v.duration||0).toFixed(3)),rights:'',sync:'native',smart_crop:'off'});renderEditor();});$('addOverlay').addEventListener('click',()=>{const m=project.media.find(x=>x.type==='image'||x.type==='video');if(!m){message('Importer une image ou une vidéo produit d’abord.',true);return;}collectForm();draft.overlays.push({file:m.file,start:1,duration:2,rights:'',motion:'static',layout:'pip_right',fade:.12});renderEditor();});$('voiceLanguage').addEventListener('change',()=>{if(project)updateJob();});$('voiceGenerate').addEventListener('click',generateVoice);$('presenterGenerate').addEventListener('click',generatePresenter);$('presenterAudio').addEventListener('change',renderPresenterOptions);$('presenterPortrait').addEventListener('change',renderPresenterOptions);$('shortPreview').addEventListener('click',()=>runNarrated(true));$('shortRender').addEventListener('click',()=>runNarrated(false));$('save').addEventListener('click',async()=>{try{await save();}catch(e){message(e.message,true);}});$('preview').addEventListener('click',()=>runExport(true));$('render').addEventListener('click',()=>runExport(false));}
+function events(){ $('connect').addEventListener('click',connect);$('token').addEventListener('keydown',e=>{if(e.key==='Enter')connect()});$('create').addEventListener('click',createProject);$('projects').addEventListener('change',async e=>{projectId=e.target.value;try{await loadProject();}catch(err){message(err.message,true);}});$('upload').addEventListener('click',uploadFiles);$('addClip').addEventListener('click',()=>{const v=project.media.find(x=>x.type==='video');if(!v){message('Importer une vidéo parlée d’abord.',true);return;}collectForm();draft.talking_clips.push({file:v.file,source_in:0,duration:Math.max(.2,+(v.duration||0).toFixed(3)),rights:'',sync:'native',smart_crop:'off'});renderEditor();});$('addOverlay').addEventListener('click',()=>{const m=project.media.find(x=>x.type==='image'||x.type==='video');if(!m){message('Importer une image ou une vidéo produit d’abord.',true);return;}collectForm();draft.overlays.push({file:m.file,start:1,duration:2,rights:'',motion:'static',layout:'pip_right',fade:.12});renderEditor();});$('voiceLanguage').addEventListener('change',()=>{if(project)updateJob();});$('voiceGenerate').addEventListener('click',generateVoice);$('presenterGenerate').addEventListener('click',generatePresenter);$('presenterCheck').addEventListener('click',refreshPresenterReadiness);$('presenterAudio').addEventListener('change',renderPresenterOptions);$('presenterPortrait').addEventListener('change',renderPresenterOptions);$('shortPreview').addEventListener('click',()=>runNarrated(true));$('shortRender').addEventListener('click',()=>runNarrated(false));$('save').addEventListener('click',async()=>{try{await save();}catch(e){message(e.message,true);}});$('preview').addEventListener('click',()=>runExport(true));$('render').addEventListener('click',()=>runExport(false));}
 events();$('token').value=token;if(token)connect();
