@@ -1,6 +1,6 @@
 # UGC Zero Credit
 
-**Studio UGC TikTok, Reels et YouTube Shorts — V25 (Kaggle T4 GPU pour validation P0).** Assemble et contrôle localement des vidéos d'influenceuses IA **déjà existantes**, en conservant leur voix native. Aucune API de génération payante, aucun jeton d'inférence consommé.
+**Studio UGC TikTok, Reels et YouTube Shorts — V26 (automatisation Kaggle privée).** Assemble et contrôle localement des vidéos d'influenceuses IA **déjà existantes**, en conservant leur voix native. Aucune API de génération payante, aucun jeton d'inférence consommé.
 
 ## Studio Android, rendu V10 et génération vocale locale V11
 
@@ -37,6 +37,12 @@ La V15 réduit la taille de la mention obligatoire sur les aperçus 360 × 640 p
 ## V16 — composition éditoriale des Shorts
 
 Titres de 1–4 lignes adaptés aux écrans mobiles, fond flouté sobre, cadre discret autour du produit, repère de séquence et variations légères de zoom/panoramique. La photo n'est pas recadrée et les déclarations publicitaires restent affichées. Les tests construisent de vrais MP4 et sauvegardent des captures PNG de contrôle ; voir [PROCESS_V16.md](PROCESS_V16.md).
+
+## V26 — Kaggle automatisé sans préparation de Notebook à la main
+
+Le [workflow GitHub Actions Kaggle privé](.github/workflows/kaggle-private-gpu.yml) crée le notebook, sélectionne le GPU T4 ×2, lance et surveille le calcul depuis le téléphone. Il requiert un seul secret GitHub KAGGLE_API_TOKEN et un dataset Kaggle privé déjà préparé : **aucun MP4 ni jeton dans les artifacts d'un dépôt public**.
+
+Le programme [kaggle_automate.py](kaggle_automate.py) réalise le parcours complet depuis un PC, Termux ou serveur, y compris création d'un dataset Kaggle privé à partir d'une vidéo autorisée et de son texte, téléchargement du MP4 puis validation du manifeste GPU. Un compte Kaggle authentifié reste indispensable et les quotas restent appliqués. Voir [PROCESS_V26_AUTOMATION.md](PROCESS_V26_AUTOMATION.md).
 
 ## V25 — essai sur GPU Kaggle T4 x2 sans crédits payants
 
