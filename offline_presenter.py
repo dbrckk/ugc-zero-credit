@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -150,8 +151,18 @@ def require_musetalk(musetalk: Path, interpreter: Path) -> dict:
     # MuseTalk upstream builds some FFmpeg commands via shell concatenation.
     if not SAFE_UPSTREAM_PATH.fullmatch(str(root)):
         raise ValueError("Chemin MuseTalk dangereux : utiliser lettres, chiffres, /, _ et - uniquement")
-    if not (root / "scripts" / "inference.py").is_file():
+    inference_script = root / "scripts" / "inference.py"
+    if not inference_script.is_file():
         raise FileNotFoundError("Installer le dépôt officiel TMElyralab/MuseTalk")
+    # Check the real upstream command interface before loading CUDA or running
+    # a costly GPU job. Reject an old or incompatible MuseTalk checkout.
+    supported_flags = ("--inference_config", "--result_dir", "--unet_model_path",
+                       "--unet_config", "--version", "--fps", "--batch_size",
+                       "--output_vid_name", "--use_float16", "--ffmpeg_path")
+    source = inference_script.read_text(encoding="utf-8")
+    absent_flags = [flag for flag in supported_flags if flag not in source]
+    if absent_flags:
+        raise RuntimeError("Interface MuseTalk incompatible : " + ", ".join(absent_flags))
     missing = [p for p in MODEL_REQUIRED if not (root / p).is_file()]
     for group in ("models/sd-vae", "models/whisper", "models/face-parse-bisent"):
         if not (root / group).is_dir() or not any((root / group).iterdir()):
@@ -184,10 +195,43 @@ def inspect_video(path: Path) -> dict:
         raise RuntimeError("MuseTalk n'a pas produit de piste vidéo")
     if not any(v.get("codec_type") == "audio" for v in streams):
         raise RuntimeError("MuseTalk n'a pas produit de piste audio")
+    video = next(v for v in streams if v.get("codec_type") == "video")
+    audio = next(v for v in streams if v.get("codec_type") == "audio")
     duration = float(meta.get("format", {}).get("duration", 0))
-    if duration < .1:
-        raise RuntimeError("Vidéo MuseTalk vide")
-    return {"duration": round(duration, 3), "video_stream": True, "audio_stream": True}
+    if not math.isfinite(duration) or duration < .2:
+        raise RuntimeError("Vidéo MuseTalk vide ou durée invalide")
+    width, height = int(video.get("width", 0)), int(video.get("height", 0))
+    if width < 160 or height < 160:
+        raise RuntimeError("Vidéo MuseTalk de résolution insuffisante")
+    def stream_duration(stream):
+        value = stream.get("duration")
+        try:
+            result = float(value)
+        except (ValueError, TypeError):
+            return duration
+        return result if math.isfinite(result) and result > 0 else duration
+    video_seconds = stream_duration(video)
+    audio_seconds = stream_duration(audio)
+    if abs(video_seconds - audio_seconds) > .45:
+        raise RuntimeError("Pistes audio et vidéo désynchronisées en durée")
+    return {"duration": round(duration, 3), "video_stream": True, "audio_stream": True,
+            "width": width, "height": height, "video_seconds": round(video_seconds, 3),
+            "audio_seconds": round(audio_seconds, 3),
+            "av_track_gap_ms": round(abs(video_seconds - audio_seconds) * 1000)}
+
+
+def audible_audio_peak(path: Path) -> float:
+    """Reject silent, empty or unreadable final audio using real FFmpeg decoding."""
+    result = subprocess.run(
+        ["ffmpeg", "-hide_banner", "-nostdin", "-i", str(path), "-vn",
+         "-af", "volumedetect", "-f", "null", "-"],
+        capture_output=True, text=True, timeout=150)
+    if result.returncode:
+        raise RuntimeError("Impossible de décoder la piste audio MuseTalk")
+    matched = re.search(r"max_volume:\\s*([-+]?\\d+(?:\\.\\d+)?) dB", result.stderr)
+    if not matched or float(matched.group(1)) < -55:
+        raise RuntimeError("Piste audio MuseTalk muette ou trop faible")
+    return round(float(matched.group(1)), 2)
 
 
 def presenter(*, text: str, model: Path, image: Path, musetalk: Path,
@@ -202,10 +246,16 @@ def presenter(*, text: str, model: Path, image: Path, musetalk: Path,
     image_rights_ref = required_reference(image_rights_ref, "Droits du portrait")
     if existing_narration is None:
         text = clean_text(text)
+    if image.is_symlink():
+        raise ValueError("Lien symbolique de portrait interdit")
     image = image.expanduser().resolve(strict=True)
     if image.suffix.lower() not in IMAGE_FORMATS or not image.is_file():
         raise ValueError("MuseTalk image : fournir un PNG/JPEG de portrait autorisé")
-    out = output.expanduser().resolve()
+    # Never resolve a destination before checking whether it is a symlink.
+    # A dangling link could otherwise redirect a generated commercial asset.
+    out = output.expanduser().absolute()
+    if out.is_symlink() or out.parent.is_symlink() or out.with_suffix(".presenter.json").is_symlink():
+        raise ValueError("Liens symboliques de destination interdits")
     if out.suffix.lower() != ".mp4" or out.exists() or not out.parent.is_dir():
         raise ValueError("Sortie MP4 absente ou déjà existante / dossier introuvable")
     if out.with_suffix(".presenter.json").exists():
@@ -273,8 +323,10 @@ def presenter(*, text: str, model: Path, image: Path, musetalk: Path,
                                 capture_output=True, text=True, timeout=240)
         if decode.returncode:
             raise RuntimeError("Décodage de la vidéo produite échoué : " + decode.stderr[-500:])
-        if abs(meta["duration"] - voice_meta["duration"]) > .85:
-            raise RuntimeError("Durée voix et vidéo trop différente pour validation de production")
+        if (abs(meta["audio_seconds"] - voice_meta["duration"]) > .45
+                or abs(meta["video_seconds"] - voice_meta["duration"]) > .45):
+            raise RuntimeError("Durée voix et pistes MP4 trop différente pour validation de production")
+        audio_peak = audible_audio_peak(candidate)
         report = {
             "status": "GENERATED_NEEDS_HUMAN_REVIEW",
             "backend": "MuseTalk 1.5 local GPU + Piper CPU",
@@ -289,6 +341,10 @@ def presenter(*, text: str, model: Path, image: Path, musetalk: Path,
             "narration_wav_sha256": voice_meta["wav_sha256"],
             "reused_existing_narration": existing_narration is not None,
             "video_seconds": meta["duration"],
+            "video_track_seconds": meta["video_seconds"],
+            "audio_track_seconds": meta["audio_seconds"],
+            "av_track_gap_ms": meta["av_track_gap_ms"],
+            "voice_peak_db": audio_peak,
             "ffmpeg_full_decode": True,
             "human_lip_sync_proven": False,
             "phoneme_sync_metric": None,
@@ -300,6 +356,8 @@ def presenter(*, text: str, model: Path, image: Path, musetalk: Path,
         }
         report_tmp = tmp / "presenter.json"
         report_tmp.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        if out.is_symlink() or out.parent.is_symlink() or out.with_suffix(".presenter.json").is_symlink():
+            raise ValueError("Lien symbolique de destination avant publication")
         os.link(candidate, out)
         try:
             os.link(report_tmp, out.with_suffix(".presenter.json"))
