@@ -141,7 +141,7 @@ class V14RealEndToEnd(unittest.TestCase):
             self.assertEqual(report["prepared_fps"], 25)
             self.assertEqual((report["prepared_width"], report["prepared_height"]), (360, 640))
             self.assertTrue(report["source_audio_replaced_with_piper"])
-            self.assertGreater(report["source_frames"], 35)
+            self.assertGreater(report["prepared_frame_count"], 35)
             def frame(at):
                 result = subprocess.run(
                     ["ffmpeg", "-hide_banner", "-loglevel", "error",
