@@ -1,6 +1,6 @@
 # UGC Zero Credit
 
-**Studio UGC TikTok, Reels et YouTube Shorts — V23.** Assemble et contrôle localement des vidéos d'influenceuses IA **déjà existantes**, en conservant leur voix native. Aucune API de génération payante, aucun jeton d'inférence consommé.
+**Studio UGC TikTok, Reels et YouTube Shorts — V24 (préparation GPU P0).** Assemble et contrôle localement des vidéos d'influenceuses IA **déjà existantes**, en conservant leur voix native. Aucune API de génération payante, aucun jeton d'inférence consommé.
 
 ## Studio Android, rendu V10 et génération vocale locale V11
 
@@ -37,6 +37,12 @@ La V15 réduit la taille de la mention obligatoire sur les aperçus 360 × 640 p
 ## V16 — composition éditoriale des Shorts
 
 Titres de 1–4 lignes adaptés aux écrans mobiles, fond flouté sobre, cadre discret autour du produit, repère de séquence et variations légères de zoom/panoramique. La photo n'est pas recadrée et les déclarations publicitaires restent affichées. Les tests construisent de vrais MP4 et sauvegardent des captures PNG de contrôle ; voir [PROCESS_V16.md](PROCESS_V16.md).
+
+## V24 — installation GPU NVIDIA sécurisée et reproductible
+
+Nouveau parcours GPU **séparé du Docker CPU existant** : gpu_host.sh fournit l'installation MuseTalk 1.5 + PyTorch CUDA et Piper FR/EN, un diagnostic qui importe l'inférence réelle, puis le service privé 127.0.0.1:8788. gpu_fetch_weights.py récupère les poids officiels, et gpu_acceptance.sh peut exécuter la vraie génération d'un clip avec son WAV Piper signé et produire un rapport. Tout reste sans crédit API payant ; le matériel, le réseau et le stockage restent à la charge de l'hôte.
+
+**Aucune exécution GPU sur le serveur utilisateur n'est encore attestée** : la configuration P0 ne devient validée qu'après installation sur un vrai serveur NVIDIA et inspection du MP4 final. Voir [PROCESS_V24.md](PROCESS_V24.md).
 
 ## V23 — source vidéo animée pour une influenceuse plus naturelle
 
