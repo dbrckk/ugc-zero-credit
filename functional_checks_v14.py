@@ -123,7 +123,11 @@ class V14RealEndToEnd(unittest.TestCase):
         self.assertEqual(report["status"],"REQUIRES_HUMAN_REVIEW")
         self.assertEqual(report["disclosure"],DISCLOSURE)
         self.assertEqual(report["photo_count"],2)
-        self.assertEqual(report["visual_text_layout"],"animated_product_card_v18")
+        self.assertEqual(report["visual_text_layout"],"cinematic_parallax_product_stage_v19")
+        self.assertEqual(report["photo_motion"],"independent_foreground_entry_and_background_zoom")
+        self.assertEqual(report["transition_styles"],["smoothright"])
+        self.assertGreaterEqual(report["photo_frame_px"],8)
+        self.assertGreaterEqual(report["photo_entrance_ms"],320)
         self.assertTrue(report["scene_counter"])
         self.assertIn(report["title_line_count"],range(1,5))
         self.assertEqual(report["language"],"en_US")
@@ -149,9 +153,11 @@ class V14RealEndToEnd(unittest.TestCase):
         if sample_dir:
             folder=Path(sample_dir)
             folder.mkdir(parents=True,exist_ok=True)
-            subprocess.run(["ffmpeg","-hide_banner","-loglevel","error","-y",
-                "-ss","0.75","-i",str(file),"-frames:v","1",
-                str(folder/(file.stem+".png"))],check=True,timeout=75)
+            for stamp,label in ((.10,"entry"),(.85,"settled")):
+                subprocess.run(["ffmpeg","-hide_banner","-loglevel","error","-y",
+                    "-ss",str(stamp),"-i",str(file),"-frames:v","1",
+                    str(folder/(file.stem+"_"+label+".png"))],
+                    check=True,timeout=75)
         return file
 
     def test_03_real_preview_and_two_distinct_scenes(self):
@@ -181,6 +187,24 @@ class V14RealEndToEnd(unittest.TestCase):
         self.assertFalse(p["job"]["preview"])
         full=self.verify_result("narrated.mp4",1080,1920)
         self.assertNotEqual(full.stat().st_size,(self.root/self.pid/"renders/narrated_preview.mp4").stat().st_size)
+
+    def test_05_product_photo_really_enters_from_right(self):
+        """Pixel comparison proves the actual image card moves into the frame."""
+        video = self.root/self.pid/"renders"/"narrated_preview.mp4"
+        # First CI photo is flat red. At 0.10s its card has not yet reached
+        # x=70; at 0.85s it occupies this point, brighter than the blur layer.
+        def pixel(at):
+            r = subprocess.run(
+                ["ffmpeg","-hide_banner","-loglevel","error",
+                 "-ss",str(at),"-i",str(video),"-frames:v","1",
+                 "-vf","crop=1:1:70:210,format=rgb24",
+                 "-f","rawvideo","-"],
+                capture_output=True,check=True,timeout=45)
+            self.assertEqual(len(r.stdout),3)
+            return tuple(r.stdout)
+        before, after = pixel(.10), pixel(.85)
+        self.assertGreater(after[0], before[0]+32, (before,after))
+        self.assertGreater(after[1], before[1]+18, (before,after))
 
     def test_05_real_timeline_progresses_inside_encoded_preview(self):
         """Inspect real encoded pixels at start and end: progress must move."""
