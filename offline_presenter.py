@@ -165,7 +165,11 @@ def require_musetalk(musetalk: Path, interpreter: Path) -> dict:
     absent_flags = [flag for flag in supported_flags if flag not in source]
     if absent_flags:
         raise RuntimeError("Interface MuseTalk incompatible : " + ", ".join(absent_flags))
-    missing = [p for p in MODEL_REQUIRED if not (root / p).is_file()]
+    # A zero-byte or truncated model must never make the Android UI say "ready".
+    missing = [p for p in MODEL_REQUIRED
+               if not (root / p).is_file()
+               or (root / p).is_symlink()
+               or (root / p).stat().st_size < (100_000 if p.endswith((".pth", ".bin")) else 10)]
     for group in ("models/sd-vae", "models/whisper", "models/face-parse-bisent"):
         if not (root / group).is_dir() or not any((root / group).iterdir()):
             missing.append(group + "/(poids absents)")
@@ -174,13 +178,24 @@ def require_musetalk(musetalk: Path, interpreter: Path) -> dict:
     py = interpreter.expanduser().resolve(strict=True)
     if not py.is_file():
         raise FileNotFoundError(f"Python de MuseTalk manquant : {py}")
+    # Import the actual upstream inference module, not just CUDA: missing
+    # OpenMMLab/Whisper/FaceParsing dependencies must fail before queueing GPU.
+    gpu_check = (
+        "import torch; "
+        "assert torch.cuda.is_available(), 'CUDA unavailable'; "
+        "p=torch.cuda.get_device_properties(0); "
+        "assert p.total_memory>=4*1024**3, 'VRAM under 4 GiB'; "
+        "free,total=torch.cuda.mem_get_info(); "
+        "assert free>=2*1024**3, 'Less than 2 GiB VRAM free'; "
+        "from scripts import inference; print('CUDA_AVAILABLE=True')"
+    )
     check = subprocess.run(
-        [str(py), "-c", "import torch; print('CUDA_AVAILABLE='+str(torch.cuda.is_available()))"],
-        cwd=root, text=True, capture_output=True, timeout=30,
+        [str(py), "-c", gpu_check],
+        cwd=root, text=True, capture_output=True, timeout=120,
         env={**os.environ, "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"},
     )
     if check.returncode or "CUDA_AVAILABLE=True" not in check.stdout:
-        raise RuntimeError("MuseTalk 1.5 indisponible : GPU NVIDIA CUDA / PyTorch CUDA fonctionnel requis")
+        raise RuntimeError("MuseTalk GPU indisponible : CUDA, VRAM libre ou imports inference incompatibles")
     return {"root": root, "python": py, "missing_weights": []}
 
 
