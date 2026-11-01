@@ -10,6 +10,7 @@ import argparse
 import hashlib
 import json
 import math
+from fractions import Fraction
 import os
 from pathlib import Path
 import re
@@ -33,6 +34,7 @@ MODEL_REQUIRED = (
     "models/face-parse-bisent/resnet18-5c106cde.pth",
 )
 IMAGE_FORMATS = frozenset({".png", ".jpg", ".jpeg"})
+VIDEO_FORMATS = frozenset({".mp4", ".mov", ".mkv"})
 
 
 def digest(path: Path) -> str:
@@ -234,6 +236,71 @@ def audible_audio_peak(path: Path) -> float:
     return round(float(matched.group(1)), 2)
 
 
+def prepare_presenter_video(source: Path, destination: Path, *, voice_seconds: float) -> dict:
+    """Prepare real moving footage for MuseTalk while bounding disk and GPU cost."""
+    if source.is_symlink() or destination.is_symlink():
+        raise ValueError("Lien symbolique de vidéo interdit")
+    if source.suffix.lower() not in VIDEO_FORMATS or not source.is_file():
+        raise ValueError("Source de présentatrice : MP4, MOV ou MKV requis")
+    if destination.suffix.lower() != ".mp4" or destination.exists() or not destination.parent.is_dir():
+        raise ValueError("Destination de normalisation MP4 invalide")
+    if source.stat().st_size > 120 * 1024 * 1024:
+        raise ValueError("Vidéo source trop grande pour MuseTalk (maximum 120 Mo)")
+    if not .5 <= voice_seconds <= 60:
+        raise ValueError("Durée de voix MuseTalk limitée à 0,5–60 secondes")
+    try:
+        completed = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_format", "-show_streams",
+             "-of", "json", str(source)],
+            capture_output=True, text=True, timeout=30, check=True)
+        info = json.loads(completed.stdout)
+        video = next(s for s in info["streams"] if s.get("codec_type") == "video")
+        width, height = int(video["width"]), int(video["height"])
+        duration = float(info["format"]["duration"])
+        fps = float(Fraction(video.get("avg_frame_rate", "0/0")))
+    except (OSError, ValueError, KeyError, ZeroDivisionError, StopIteration,
+            subprocess.CalledProcessError, json.JSONDecodeError) as exc:
+        raise ValueError("Vidéo source illisible ou fréquence d'images invalide") from exc
+    if (not math.isfinite(duration) or duration < .8 or duration > 60
+            or width < 256 or height < 256 or height < width
+            or not math.isfinite(fps) or fps < 5 or fps > 60):
+        raise ValueError("Utiliser un clip vertical 0,8–60 s, au moins 256 px et 5–60 i/s")
+    scale = min(1., 720. / width, 1280. / height)
+    target_width = max(2, int(width * scale) // 2 * 2)
+    target_height = max(2, int(height * scale) // 2 * 2)
+    # MuseTalk cycles source frames when narration is longer than footage.
+    used_seconds = min(duration, voice_seconds, 15.)
+    try:
+        subprocess.run(
+            ["ffmpeg", "-hide_banner", "-nostdin", "-v", "error", "-y",
+             "-i", str(source), "-map", "0:v:0", "-an", "-sn",
+             "-t", f"{used_seconds:.3f}",
+             "-vf", f"fps=25,scale={target_width}:{target_height}:flags=lanczos,format=yuv420p",
+             "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+             "-movflags", "+faststart", str(destination)],
+            capture_output=True, text=True, timeout=300, check=True)
+        converted = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=width,height,nb_frames,avg_frame_rate",
+             "-of", "json", str(destination)],
+            capture_output=True, text=True, timeout=30, check=True)
+        stream = json.loads(converted.stdout)["streams"][0]
+        if (int(stream["width"]) != target_width or int(stream["height"]) != target_height
+                or float(Fraction(stream["avg_frame_rate"])) != 25
+                or int(stream.get("nb_frames", 0)) < 10):
+            raise ValueError("Normalisation vidéo non conforme")
+    except (OSError, subprocess.CalledProcessError, ValueError, KeyError,
+            json.JSONDecodeError) as exc:
+        destination.unlink(missing_ok=True)
+        raise RuntimeError("Impossible de normaliser la source avec FFmpeg") from exc
+    return {"source_type": "moving_video", "source_duration": round(duration, 3),
+            "source_fps": round(fps, 3), "source_width": width, "source_height": height,
+            "prepared_fps": 25, "prepared_width": target_width,
+            "prepared_height": target_height, "prepared_seconds": round(used_seconds, 3),
+            "prepared_frame_count": int(stream["nb_frames"]),
+            "source_audio_replaced_with_piper": True}
+
+
 def presenter(*, text: str, model: Path, image: Path, musetalk: Path,
               interpreter: Path, output: Path, voice_license_ref: str,
               image_rights_ref: str, confirm_voice_rights: bool,
@@ -249,8 +316,9 @@ def presenter(*, text: str, model: Path, image: Path, musetalk: Path,
     if image.is_symlink():
         raise ValueError("Lien symbolique de portrait interdit")
     image = image.expanduser().resolve(strict=True)
-    if image.suffix.lower() not in IMAGE_FORMATS or not image.is_file():
-        raise ValueError("MuseTalk image : fournir un PNG/JPEG de portrait autorisé")
+    suffix = image.suffix.lower()
+    if suffix not in IMAGE_FORMATS | VIDEO_FORMATS or not image.is_file():
+        raise ValueError("MuseTalk : fournir un portrait PNG/JPEG ou un clip MP4/MOV/MKV autorisé")
     # Never resolve a destination before checking whether it is a symlink.
     # A dangling link could otherwise redirect a generated commercial asset.
     out = output.expanduser().absolute()
@@ -276,8 +344,7 @@ def presenter(*, text: str, model: Path, image: Path, musetalk: Path,
         tmp = Path(tmpname).resolve()
         if not SAFE_UPSTREAM_PATH.fullmatch(str(tmp)):
             raise ValueError("Chemin temporaire non compatible avec MuseTalk")
-        picture = tmp / ("avatar" + image.suffix.lower())
-        shutil.copyfile(image, picture)
+        picture = tmp / ("avatar" + suffix)
         sound = tmp / "voice.wav"
         if existing_narration is None:
             voice_meta = synthesize(text, model, sound, voice_license_ref=voice_license_ref,
@@ -288,6 +355,12 @@ def presenter(*, text: str, model: Path, image: Path, musetalk: Path,
                           "model_sha256": source_voice["model_sha256"],
                           "wav_sha256": source_voice["sha256"],
                           "language": source_voice["language"]}
+        if suffix in VIDEO_FORMATS:
+            picture = tmp / "avatar.mp4"
+            source_meta = prepare_presenter_video(image, picture, voice_seconds=voice_meta["duration"])
+        else:
+            shutil.copyfile(image, picture)
+            source_meta = {"source_type": "still_portrait", "source_audio_replaced_with_piper": False}
         yaml = tmp / "inference.yaml"
         yaml.write_text(f"ugc_presenter:\n  video_path: {picture}\n  audio_path: {sound}\n  result_name: presenter.mp4\n", encoding="utf-8")
         render_dir = tmp / "musetalk_result"
@@ -332,6 +405,7 @@ def presenter(*, text: str, model: Path, image: Path, musetalk: Path,
             "backend": "MuseTalk 1.5 local GPU + Piper CPU",
             "sha256": digest(candidate),
             "portrait_sha256": digest(image),
+            **source_meta,
             "voice_model_sha256": voice_meta["model_sha256"],
             "voice_license_ref": voice_license_ref,
             "portrait_rights_ref": image_rights_ref,
@@ -379,12 +453,16 @@ def main(argv=None):
         choice = sp.add_mutually_exclusive_group(required=True)
         choice.add_argument("--text")
         choice.add_argument("--text-file", type=Path)
-        sp.add_argument("--voice-model", required=True, type=Path)
+        if name == "presenter":
+            choice.add_argument("--existing-narration", type=Path,
+                                help="WAV Piper déjà généré et signé ; aucun recalcul de la voix")
+        sp.add_argument("--voice-model", required=(name == "voice"), type=Path)
         sp.add_argument("--voice-license-ref", required=True)
         sp.add_argument("--confirm-voice-rights", action="store_true")
         sp.add_argument("--output", required=True, type=Path)
         if name == "presenter":
-            sp.add_argument("--image", required=True, type=Path)
+            sp.add_argument("--source", "--image", dest="image", required=True, type=Path,
+                            help="Portrait JPEG/PNG ou clip animé MP4/MOV/MKV")
             sp.add_argument("--image-rights-ref", required=True)
             sp.add_argument("--confirm-image-rights", action="store_true")
             sp.add_argument("--musetalk-dir", required=True, type=Path)
@@ -400,7 +478,10 @@ def main(argv=None):
                 require_musetalk(a.musetalk_dir, a.musetalk_python)
                 result["musetalk"] = "CUDA_AVAILABLE"
         else:
-            text = a.text if a.text is not None else a.text_file.read_text(encoding="utf-8")
+            text = a.text if a.text is not None else (a.text_file.read_text(encoding="utf-8")
+                if a.text_file else "")
+            if a.command == "presenter" and a.existing_narration is None and a.voice_model is None:
+                raise ValueError("--voice-model requis lors de la synthèse d’une nouvelle voix")
             if a.command == "voice":
                 result = synthesize(text, a.voice_model, a.output,
                                     voice_license_ref=a.voice_license_ref,
@@ -411,7 +492,8 @@ def main(argv=None):
                                    output=a.output, voice_license_ref=a.voice_license_ref,
                                    image_rights_ref=a.image_rights_ref,
                                    confirm_voice_rights=a.confirm_voice_rights,
-                                   confirm_image_rights=a.confirm_image_rights)
+                                   confirm_image_rights=a.confirm_image_rights,
+                                   existing_narration=a.existing_narration)
         print(json.dumps(result, ensure_ascii=False, indent=2))
     except (ValueError, FileNotFoundError, FileExistsError, RuntimeError,
             OSError, subprocess.TimeoutExpired) as exc:

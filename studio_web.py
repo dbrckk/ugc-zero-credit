@@ -680,13 +680,21 @@ class Handler(BaseHTTPRequestHandler):
         portrait_item = indexed.get(portrait_name) if isinstance(portrait_name, str) else None
         if not voice_item or voice_item.get("generated_by") != "piper_local" or voice_item.get("type") != "audio":
             raise ValueError("Choisir un WAV Piper produit dans ce projet")
-        if not portrait_item or portrait_item.get("type") != "image":
-            raise ValueError("Choisir un portrait autorisé du projet")
+        if not portrait_item or portrait_item.get("type") not in {"image", "video"}:
+            raise ValueError("Choisir un portrait ou clip vidéo autorisé du projet")
         wav = safe_uploaded_file(project, voice_name)
         photo = safe_uploaded_file(project, portrait_name)
-        if photo.suffix.lower() not in {".jpg", ".jpeg", ".png"}:
-            raise ValueError("Portrait MuseTalk : JPEG ou PNG uniquement")
-        inspect_photos([photo])
+        if photo.suffix.lower() not in {".jpg", ".jpeg", ".png", ".mp4", ".mov", ".mkv"}:
+            raise ValueError("Source MuseTalk : JPEG, PNG, MP4, MOV ou MKV uniquement")
+        if portrait_item["type"] == "image":
+            inspect_photos([photo])
+        else:
+            duration = float(portrait_item.get("duration", 0))
+            width = int(portrait_item.get("width", 0))
+            height = int(portrait_item.get("height", 0))
+            if (photo.stat().st_size > 120 * 1024 * 1024 or not .8 <= duration <= 60
+                    or width < 256 or height < 256 or height < width):
+                raise ValueError("Clip MuseTalk : vertical, 0,8–60 s, 256 px minimum, 120 Mo maximum")
         voice_info = inspect_narration(wav, voice_item.get("voice_sha256"))
         if (len(indexed) >= MAX_FILES
                 or sum(item.get("bytes", 0) for item in indexed.values()) >= MAX_PROJECT_BYTES
@@ -725,7 +733,8 @@ class Handler(BaseHTTPRequestHandler):
                     item = {"file": "media/" + video_file.name, "bytes": size,
                             **summarize_media(video_file), "generated_by": "musetalk_local",
                             "language": voice_info["language"], "lip_sync_verified": False,
-                            "human_review_required": True}
+                            "human_review_required": True,
+                            "source_type": report["source_type"]}
                     media.append(item)
                     store_json(project / "media.json", media)
                 with self.server.jobs_lock:

@@ -29,15 +29,15 @@
  <div class="actions"><button id="shortPreview" class="secondary">Aperçu rapide</button><button id="shortRender" class="primary">Créer le Short 1080 × 1920</button></div>
  </section>
  <section class="panel hidden" id="presenterPanel">
- <h2>6. Portrait parlant — MuseTalk local (GPU)</h2>
- <p class="hint" id="presenterAvailability">Cette option nécessite un GPU NVIDIA CUDA et MuseTalk 1.5 déjà installés sur le serveur. Elle réutilise le WAV Piper sans régénérer la voix. Aucun crédit d'API.</p>
+ <h2>6. Influenceuse animée — MuseTalk local (GPU)</h2>
+ <p class="hint" id="presenterAvailability">Utilise une vraie vidéo verticale de présentatrice avec ses gestes et expressions, ou un portrait fixe. MuseTalk synchronise la bouche avec la voix Piper FR/EN existante, sans crédits API. GPU NVIDIA CUDA requis.</p>
  <div class="grid-two"><label>Narration Piper FR/EN<select id="presenterAudio"></select></label>
- <label>Portrait autorisé (JPEG/PNG)<select id="presenterPortrait"></select></label></div>
+ <label>Source autorisée : clip vertical MP4/MOV/MKV ou portrait JPEG/PNG<select id="presenterPortrait"></select></label></div>
  <label>Référence vérifiable de l'autorisation du portrait<input id="presenterRightsRef" maxlength="500" placeholder="Contrat / autorisation écrite / référence de licence"></label>
- <label class="inline-check"><input id="presenterRights" type="checkbox"> Je confirme les droits du portrait et de la voix synthétisée.</label>
- <label class="inline-check"><input id="presenterConsent" type="checkbox"> Je confirme que la personne représentée a consenti à cet usage, ou que le personnage est entièrement fictif et autorisé.</label>
- <div class="actions"><button id="presenterCheck" class="secondary" type="button">Vérifier GPU et modèles</button><button id="presenterGenerate" class="primary" disabled>Créer la vidéo parlante sur GPU</button></div>
- <p class="fineprint">La vidéo obtenue reste à vérifier avant publication : mouvements des lèvres, voix, expression, fidélité du produit et droits commerciaux. Le GPU peut être indisponible même si MuseTalk est configuré.</p>
+ <label class="inline-check"><input id="presenterRights" type="checkbox"> Je confirme les droits de la vidéo ou du portrait et de la voix synthétisée.</label>
+ <label class="inline-check"><input id="presenterConsent" type="checkbox"> Je confirme que la personne filmée ou représentée a consenti à cet usage, ou que le personnage est entièrement fictif et autorisé.</label>
+ <div class="actions"><button id="presenterCheck" class="secondary" type="button">Vérifier GPU et modèles</button><button id="presenterGenerate" class="primary" disabled>Créer la vidéo parlante sur GPU</button><button id="presenterUse" class="secondary" disabled>Ajouter la vidéo IA au montage</button></div>
+ <p class="fineprint">Clip recommandé : vertical, 0,8 à 60 s, 120 Mo maximum, visage visible ; les mouvements d’origine sont conservés. L’audio original du clip est remplacé par la narration Piper. Contrôler ensuite les lèvres, les gestes, la voix et les droits avant publication.</p>
  </section>
  <section class="panel hidden" id="editorPanel"><h2>7. Préparer la publicité avec présentatrice</h2>
  <div class="grid-two"><label>Nom du produit<input id="productName" placeholder="Produit exact"></label><label>Image de référence<select id="productRef"></select></label></div>

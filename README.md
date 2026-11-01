@@ -1,6 +1,6 @@
 # UGC Zero Credit
 
-**Studio UGC TikTok, Reels et YouTube Shorts — V22.** Assemble et contrôle localement des vidéos d'influenceuses IA **déjà existantes**, en conservant leur voix native. Aucune API de génération payante, aucun jeton d'inférence consommé.
+**Studio UGC TikTok, Reels et YouTube Shorts — V23.** Assemble et contrôle localement des vidéos d'influenceuses IA **déjà existantes**, en conservant leur voix native. Aucune API de génération payante, aucun jeton d'inférence consommé.
 
 ## Studio Android, rendu V10 et génération vocale locale V11
 
@@ -37,6 +37,12 @@ La V15 réduit la taille de la mention obligatoire sur les aperçus 360 × 640 p
 ## V16 — composition éditoriale des Shorts
 
 Titres de 1–4 lignes adaptés aux écrans mobiles, fond flouté sobre, cadre discret autour du produit, repère de séquence et variations légères de zoom/panoramique. La photo n'est pas recadrée et les déclarations publicitaires restent affichées. Les tests construisent de vrais MP4 et sauvegardent des captures PNG de contrôle ; voir [PROCESS_V16.md](PROCESS_V16.md).
+
+## V23 — source vidéo animée pour une influenceuse plus naturelle
+
+Le studio Android peut sélectionner un **clip filmé vertical de présentatrice autorisée** (MP4, MOV ou MKV), pas seulement un portrait fixe. Le moteur MuseTalk 1.5 local conserve les mouvements du clip source et synchronise la zone de la bouche sur le WAV Piper FR/EN déjà enregistré. Pour maîtriser les ressources GPU, FFmpeg normalise la source à 25 images/s et au maximum 720 × 1280 ; les vidéos importées deviennent prévisualisables sur Android. La CLI offre aussi `--existing-narration` pour réutiliser un WAV signé sans resynthèse. [Procédure V23](PROCESS_V23.md).
+
+Il faut toujours un GPU CUDA avec MuseTalk et ses modèles réellement installés. Les mouvements sont ceux du clip, non des gestes générés ; la fluidité et la synchronisation labiale **ne sont pas validées tant qu'un vrai rendu GPU n'a pas été inspecté**.
 
 ## V22 — diagnostic CUDA réel et contrôle des vidéos MuseTalk
 

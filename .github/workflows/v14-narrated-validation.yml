@@ -1,7 +1,7 @@
 name: V14 real narrated photo Shorts — local CPU Piper plus FFmpeg
 on:
   push:
-    branches: [feat/v14-narrated-photo-shorts, feat/v15-short-visual-polish, feat/v16-visual-storytelling, fix/v17-output-symlink-safety, feat/v18-animated-headline-progress, feat/v19-cinematic-photo-stage, feat/v20-audio-aware-scene-cuts, feat/v21-private-musetalk-android, feat/v22-presenter-readiness-av-qa]
+    branches: [feat/v14-narrated-photo-shorts, feat/v15-short-visual-polish, feat/v16-visual-storytelling, fix/v17-output-symlink-safety, feat/v18-animated-headline-progress, feat/v19-cinematic-photo-stage, feat/v20-audio-aware-scene-cuts, feat/v21-private-musetalk-android, feat/v22-presenter-readiness-av-qa, feat/v23-moving-presenter-video]
   workflow_dispatch:
 permissions:
   contents: read
@@ -28,7 +28,7 @@ jobs:
         env:
           UGC_TEST_PIPER_MODEL: ${{ runner.temp }}/ugc-voices/fr_FR-siwis-medium.onnx
           UGC_TEST_PIPER_MODEL_EN: ${{ runner.temp }}/ugc-voices/en_US-lessac-medium.onnx
-          UGC_V16_ARTIFACTS_DIR: ${{ runner.temp }}/ugc-v22-frames
+          UGC_V16_ARTIFACTS_DIR: ${{ runner.temp }}/ugc-v23-frames
         run: |
           python -m compileall -q studio_web.py narrated_short.py offline_presenter.py speech_scene_timing.py functional_checks_v14.py
           node --check studio_web/studio.js
@@ -41,8 +41,8 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ugc-v22-readiness-av-qa-frames
-          path: ${{ runner.temp }}/ugc-v22-frames/*.png
+          name: ugc-v23-moving-presenter-frames
+          path: ${{ runner.temp }}/ugc-v23-frames/*.png
           if-no-files-found: ignore
           retention-days: 3
       - name: Build real private Docker studio (two ONNX voice models)
