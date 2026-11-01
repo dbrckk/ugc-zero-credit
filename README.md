@@ -1,6 +1,6 @@
 # UGC Zero Credit
 
-**Studio UGC TikTok, Reels et YouTube Shorts — V19.** Assemble et contrôle localement des vidéos d'influenceuses IA **déjà existantes**, en conservant leur voix native. Aucune API de génération payante, aucun jeton d'inférence consommé.
+**Studio UGC TikTok, Reels et YouTube Shorts — V20.** Assemble et contrôle localement des vidéos d'influenceuses IA **déjà existantes**, en conservant leur voix native. Aucune API de génération payante, aucun jeton d'inférence consommé.
 
 ## Studio Android, rendu V10 et génération vocale locale V11
 
@@ -37,6 +37,10 @@ La V15 réduit la taille de la mention obligatoire sur les aperçus 360 × 640 p
 ## V16 — composition éditoriale des Shorts
 
 Titres de 1–4 lignes adaptés aux écrans mobiles, fond flouté sobre, cadre discret autour du produit, repère de séquence et variations légères de zoom/panoramique. La photo n'est pas recadrée et les déclarations publicitaires restent affichées. Les tests construisent de vrais MP4 et sauvegardent des captures PNG de contrôle ; voir [PROCESS_V16.md](PROCESS_V16.md).
+
+## V20 — changements de scène au rythme de la narration
+
+Lorsqu'un WAV Piper FR/EN contient des pauses audibles, le moteur FFmpeg ajuste les changements de photo pour les rapprocher de ces pauses, sans modifier ni couper la voix. Les plans gardent leur durée minimale, les transitions de 300 ms, l'animation à deux plans V19 et la progression synchronisée. Si aucune pause acceptable n'existe, les coupes restent régulièrement espacées. Le rapport indique les instants des coupes et leur éventuel alignement sur une pause. **Ce mécanisme ne mesure pas l'alignement phonétique des lèvres** et ne génère toujours pas de nouvelle influenceuse : voir [PROCESS_V20.md](PROCESS_V20.md).
 
 ## V19 — mise en scène produit à deux plans (FFmpeg CPU)
 

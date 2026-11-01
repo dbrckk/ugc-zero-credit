@@ -16,6 +16,8 @@ import shutil
 import subprocess
 import tempfile
 
+from speech_scene_timing import plan_scenes
+
 MAX_IMAGES = 6
 MAX_SECONDS = 60
 DISCLOSURE = "PUBLICITÉ  ·  CONTENU GÉNÉRÉ AVEC IA"
@@ -138,6 +140,8 @@ def render_short(images: list[Path], narration: Path, output: Path, *,
     # Every image appears for >=1.0 s; no rapid-flashing slides for short narration.
     if segment < 1:
         raise ValueError("Réduire le nombre de photos pour cette narration")
+    scene_timing = plan_scenes(narration, seconds, len(images), transition)
+    scene_durations = scene_timing["scene_durations"]
     with tempfile.TemporaryDirectory(prefix=".ugc-short-", dir=output.parent) as folder:
         work = Path(folder)
         # FFmpeg's drawtext may render literal newlines as missing-glyph squares.
@@ -150,8 +154,8 @@ def render_short(images: list[Path], narration: Path, output: Path, *,
         disclosure_file = work / "disclosure.txt"
         disclosure_file.write_text(DISCLOSURE, encoding="utf-8")
         cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-y"]
-        for photo in images:
-            cmd += ["-loop", "1", "-framerate", str(fps), "-t", f"{segment + .12:.4f}", "-i", str(photo)]
+        for photo, scene_length in zip(images, scene_durations):
+            cmd += ["-loop", "1", "-framerate", str(fps), "-t", f"{scene_length + .12:.4f}", "-i", str(photo)]
         cmd += ["-i", str(narration)]
         # A two-plane product stage: photo card and blurred background have
         # independent trajectories, unlike zooming a flattened still image.
@@ -161,6 +165,7 @@ def render_short(images: list[Path], narration: Path, output: Path, *,
         entrance_seconds = min(0.72, max(0.32, segment * 0.50))
         filt = []
         for i in range(len(images)):
+            scene_length = scene_durations[i]
             direction = 1 if i % 2 == 0 else -1
             entry_shift = direction * int(w * .30)
             drift = direction * int(w * .016)
@@ -182,7 +187,7 @@ def render_short(images: list[Path], narration: Path, output: Path, *,
                 f"format=yuv420p,zoompan=z='min(zoom+0.00032,1.070)':"
                 f"x='(iw-iw/zoom)*{0.30 if i % 2 == 0 else 0.70}':"
                 f"y='(ih-ih/zoom)*{0.63 if i % 2 == 0 else 0.37}':"
-                f"d=1:s={w}x{h}:fps={fps},trim=duration={segment:.5f},"
+                f"d=1:s={w}x{h}:fps={fps},trim=duration={scene_length:.5f},"
                 f"setpts=PTS-STARTPTS,"
                 f"drawbox=x=0:y=0:w={w}:h={int(h*.19)}:color=black@0.34:t=fill,"
                 f"drawbox=x=0:y={int(h*.86)}:w={w}:h={int(h*.14)}:color=black@0.34:t=fill,"
@@ -198,7 +203,7 @@ def render_short(images: list[Path], narration: Path, output: Path, *,
         transition_styles = []
         for i in range(1, len(images)):
             final = f"x{i}"
-            offset = i * (segment - transition)
+            offset = scene_timing["transition_offsets"][i-1]
             # Slide direction follows the entering photo's side.
             style = "smoothright" if i % 2 else "smoothleft"
             transition_styles.append(style)
@@ -277,6 +282,11 @@ def render_short(images: list[Path], narration: Path, output: Path, *,
             "photo_entrance_ms": round(entrance_seconds * 1000),
             "photo_frame_px": frame_pad,
             "transition_styles": transition_styles,
+            "scene_cut_method": scene_timing["method"],
+            "scene_cut_times": [round(t, 3) for t in scene_timing["cut_times"]],
+            "scene_durations": [round(t, 3) for t in scene_durations],
+            "narration_pauses_detected": scene_timing["available_pauses"],
+            "scene_cuts_near_pauses": scene_timing["pause_matches"],
             "animated_headline": "slide_fade_500ms",
             "animated_progress_segments": 20,
             "title_line_count": title_lines, "title_font_size": title_size,
