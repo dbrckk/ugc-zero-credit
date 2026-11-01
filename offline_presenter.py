@@ -236,6 +236,71 @@ def audible_audio_peak(path: Path) -> float:
     return round(float(matched.group(1)), 2)
 
 
+def prepare_presenter_video(source: Path, destination: Path, *, voice_seconds: float) -> dict:
+    """Prepare real moving footage for MuseTalk while bounding disk and GPU cost."""
+    if source.is_symlink() or destination.is_symlink():
+        raise ValueError("Lien symbolique de vidéo interdit")
+    if source.suffix.lower() not in VIDEO_FORMATS or not source.is_file():
+        raise ValueError("Source de présentatrice : MP4, MOV ou MKV requis")
+    if destination.suffix.lower() != ".mp4" or destination.exists() or not destination.parent.is_dir():
+        raise ValueError("Destination de normalisation MP4 invalide")
+    if source.stat().st_size > 120 * 1024 * 1024:
+        raise ValueError("Vidéo source trop grande pour MuseTalk (maximum 120 Mo)")
+    if not .5 <= voice_seconds <= 60:
+        raise ValueError("Durée de voix MuseTalk limitée à 0,5–60 secondes")
+    try:
+        completed = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_format", "-show_streams",
+             "-of", "json", str(source)],
+            capture_output=True, text=True, timeout=30, check=True)
+        info = json.loads(completed.stdout)
+        video = next(s for s in info["streams"] if s.get("codec_type") == "video")
+        width, height = int(video["width"]), int(video["height"])
+        duration = float(info["format"]["duration"])
+        fps = float(Fraction(video.get("avg_frame_rate", "0/0")))
+    except (OSError, ValueError, KeyError, ZeroDivisionError, StopIteration,
+            subprocess.CalledProcessError, json.JSONDecodeError) as exc:
+        raise ValueError("Vidéo source illisible ou fréquence d'images invalide") from exc
+    if (not math.isfinite(duration) or duration < .8 or duration > 60
+            or width < 256 or height < 256 or height < width
+            or not math.isfinite(fps) or fps < 5 or fps > 60):
+        raise ValueError("Utiliser un clip vertical 0,8–60 s, au moins 256 px et 5–60 i/s")
+    scale = min(1., 720. / width, 1280. / height)
+    target_width = max(2, int(width * scale) // 2 * 2)
+    target_height = max(2, int(height * scale) // 2 * 2)
+    # MuseTalk cycles source frames when narration is longer than footage.
+    used_seconds = min(duration, voice_seconds, 30.)
+    try:
+        subprocess.run(
+            ["ffmpeg", "-hide_banner", "-nostdin", "-v", "error", "-y",
+             "-i", str(source), "-map", "0:v:0", "-an", "-sn",
+             "-t", f"{used_seconds:.3f}",
+             "-vf", f"fps=25,scale={target_width}:{target_height}:flags=lanczos,format=yuv420p",
+             "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+             "-movflags", "+faststart", str(destination)],
+            capture_output=True, text=True, timeout=300, check=True)
+        converted = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=width,height,nb_frames,avg_frame_rate",
+             "-of", "json", str(destination)],
+            capture_output=True, text=True, timeout=30, check=True)
+        stream = json.loads(converted.stdout)["streams"][0]
+        if (int(stream["width"]) != target_width or int(stream["height"]) != target_height
+                or float(Fraction(stream["avg_frame_rate"])) != 25
+                or int(stream.get("nb_frames", 0)) < 10):
+            raise ValueError("Normalisation vidéo non conforme")
+    except (OSError, subprocess.CalledProcessError, ValueError, KeyError,
+            json.JSONDecodeError) as exc:
+        destination.unlink(missing_ok=True)
+        raise RuntimeError("Impossible de normaliser la source avec FFmpeg") from exc
+    return {"source_type": "moving_video", "source_duration": round(duration, 3),
+            "source_fps": round(fps, 3), "source_width": width, "source_height": height,
+            "prepared_fps": 25, "prepared_width": target_width,
+            "prepared_height": target_height, "prepared_seconds": round(used_seconds, 3),
+            "source_frames": int(stream["nb_frames"]),
+            "source_audio_replaced_with_piper": True}
+
+
 def presenter(*, text: str, model: Path, image: Path, musetalk: Path,
               interpreter: Path, output: Path, voice_license_ref: str,
               image_rights_ref: str, confirm_voice_rights: bool,
