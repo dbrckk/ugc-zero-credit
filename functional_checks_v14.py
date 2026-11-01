@@ -277,6 +277,31 @@ class V14RealEndToEnd(unittest.TestCase):
                 self.assertTrue(all(len(line) <= 16 for line in rendered.split("\n")))
                 self.assertGreater(size, 0)
 
+    def test_05_gpu_presenter_is_explicitly_disabled_on_cpu_server(self):
+        status, health = self.call("/api/health")
+        self.assertEqual(status, 200)
+        self.assertFalse(health["presenter_gpu_configured"])
+        self.assertFalse(health["presenter_gpu_verified"])
+        path = "/api/projects/" + self.pid + "/presenter"
+        payload = {"audio": self.voice, "portrait": "media/red.png",
+                   "portrait_rights_ref": "portrait rights documented",
+                   "confirm_voice_rights": True,
+                   "confirm_portrait_rights": True,
+                   "confirm_subject_consent": True}
+        self.assertEqual(self.call(path, "POST", payload, auth=False)[0], 401)
+        status, response = self.call(path, "POST", payload)
+        self.assertEqual(status, 503, response)
+        self.assertIn("MuseTalk", response["error"])
+        status, project = self.call("/api/projects/" + self.pid)
+        self.assertEqual(status, 200)
+        self.assertNotEqual(project["job"].get("kind"), "presenter")
+        status, page = self.call("/")
+        self.assertEqual(status, 200)
+        self.assertIn(b'id="presenterPanel"', page)
+        status, js = self.call("/studio.js")
+        self.assertEqual(status, 200)
+        self.assertIn(b"generatePresenter", js)
+
     def test_06_legacy_ui_and_private_status_unchanged(self):
         code,page=self.call("/",auth=False)
         self.assertEqual(code,200)
