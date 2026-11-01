@@ -17,6 +17,7 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 from studio_web import Handler, Studio
 from narrated_short import inspect_narration, DISCLOSURE, layout_title
+from offline_presenter import inspect_video, audible_audio_peak
 from speech_scene_timing import plan_scenes
 
 def png(rgb, w=320, h=400):
@@ -99,6 +100,28 @@ class V14RealEndToEnd(unittest.TestCase):
             self.assertLess(plan["transition_offsets"][0], plan["transition_offsets"][1])
             single = plan_scenes(path, 6, 1, 0)
             self.assertEqual(single["scene_durations"], [6])
+
+    def test_00_real_av_quality_checks_reject_silent_voice(self):
+        """No fake GPU: encode and inspect real H264/AAC files through FFmpeg."""
+        with tempfile.TemporaryDirectory(prefix="ugc-v22-audio-") as temp:
+            for silent in (False, True):
+                output = Path(temp) / ("silent.mp4" if silent else "audible.mp4")
+                audio = "anullsrc=r=16000:cl=mono" if silent else "sine=frequency=440:sample_rate=16000"
+                subprocess.run(
+                    ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+                     "-f", "lavfi", "-i", "color=c=blue:s=320x400:r=25",
+                     "-f", "lavfi", "-i", audio,
+                     "-t", "1.25", "-c:v", "libx264", "-preset", "ultrafast",
+                     "-c:a", "aac", "-shortest", str(output)],
+                    check=True, capture_output=True, timeout=75)
+                checked = inspect_video(output)
+                self.assertEqual((checked["width"], checked["height"]), (320, 400))
+                self.assertLessEqual(checked["av_track_gap_ms"], 450)
+                if silent:
+                    with self.assertRaisesRegex(RuntimeError, "muette|faible"):
+                        audible_audio_peak(output)
+                else:
+                    self.assertGreater(audible_audio_peak(output), -55)
 
     def test_01_setup_and_real_english_voice(self):
         self.assertEqual(self.call("/api/projects",auth=False)[0],401)
@@ -282,6 +305,12 @@ class V14RealEndToEnd(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertFalse(health["presenter_gpu_configured"])
         self.assertFalse(health["presenter_gpu_verified"])
+        self.assertEqual(self.call("/api/presenter/readiness", auth=False)[0], 401)
+        diagnostic_code, diagnostic = self.call("/api/presenter/readiness")
+        self.assertEqual(diagnostic_code, 200)
+        self.assertFalse(diagnostic["configured"])
+        self.assertFalse(diagnostic["ready"])
+        self.assertEqual(diagnostic["code"], "not_configured")
         path = "/api/projects/" + self.pid + "/presenter"
         payload = {"audio": self.voice, "portrait": "media/red.png",
                    "portrait_rights_ref": "portrait rights documented",
@@ -301,6 +330,7 @@ class V14RealEndToEnd(unittest.TestCase):
         status, js = self.call("/studio.js")
         self.assertEqual(status, 200)
         self.assertIn(b"generatePresenter", js)
+        self.assertIn(b"refreshPresenterReadiness", js)
 
     def test_06_legacy_ui_and_private_status_unchanged(self):
         code,page=self.call("/",auth=False)
