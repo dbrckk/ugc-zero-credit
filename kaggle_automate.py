@@ -150,6 +150,7 @@ def wait(kernel: str, *, minutes: int, interval: int) -> None:
 
 
 def check_results(folder: Path) -> list[Path]:
+    from offline_presenter import inspect_video
     root = folder.resolve(strict=True)
     matches = []
     for file in root.rglob("*.presenter.json"):
@@ -167,6 +168,16 @@ def check_results(folder: Path) -> list[Path]:
                 or report.get("publication_allowed_automatically") is not False
                 or not video.stat().st_size > 1024):
             raise ValueError("Preuve de génération GPU invalide : " + file.name)
+        # Independently decode downloaded bytes: do not trust the remote
+        # report's claim of FFmpeg validation on its own.
+        if shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None:
+            raise RuntimeError("FFmpeg/ffprobe sont nécessaires pour valider le MP4 téléchargé")
+        inspect_video(video)
+        decoded = subprocess.run(
+            ["ffmpeg", "-v", "error", "-xerror", "-i", str(video),
+             "-f", "null", "-"], capture_output=True, text=True, timeout=240)
+        if decoded.returncode:
+            raise RuntimeError("Décodage complet du MP4 Kaggle téléchargé échoué")
         matches.append(video)
     if not matches:
         raise RuntimeError("Kaggle a terminé sans manifeste GPU réel vérifiable. Pas de réussite déclarée.")
