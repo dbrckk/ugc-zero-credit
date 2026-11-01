@@ -227,21 +227,29 @@ def main(argv=None):
                  "--accelerator", KAGGLE_ID], timeout=600)
         print("Notebook : https://www.kaggle.com/code/" + kernel, flush=True)
         wait(kernel, minutes=args.wait_minutes, interval=args.poll_seconds)
+        # COMPLETE is never enough: verify the actual downloaded MP4 even when
+        # invoked from GitHub Actions. Runner copies are ephemeral and never
+        # published as artifacts. Kaggle retains the original privately.
         if args.download_dir:
             dest = args.download_dir.expanduser().absolute()
             if dest.is_symlink() or dest.exists():
                 raise FileExistsError("Pour éviter l'écrasement, fournir un dossier de sortie neuf et non symbolique")
             dest.mkdir(parents=True)
-            try:
-                command(["kernels", "output", kernel, "-p", str(dest)], timeout=900)
-                validated = check_results(dest)
-            except Exception:
-                print("Sortie non validée ; ne pas diffuser les fichiers.", file=sys.stderr)
-                raise
-            for video in validated:
-                print("MP4 GPU VALIDÉ TECHNIQUEMENT :", video, flush=True)
         else:
-            print("GPU terminé : sorties conservées dans Kaggle, aucun média copié sur GitHub.", flush=True)
+            dest = workspace / "ephemeral-result"
+            dest.mkdir()
+        try:
+            command(["kernels", "output", kernel, "-p", str(dest)], timeout=900)
+            validated = check_results(dest)
+        except Exception:
+            print("Sortie non validée ; ne pas diffuser les fichiers.", file=sys.stderr)
+            raise
+        for video in validated:
+            print("MP4 GPU vérifié avec son manifeste :", video.name, flush=True)
+        if not args.download_dir:
+            print("Copie temporaire validée puis supprimée ; résultat privé conservé sur Kaggle.", flush=True)
+        else:
+            print("Vidéo privée conservée localement dans :", dest, flush=True)
         print("Revue humaine obligatoire avant toute utilisation commerciale.", flush=True)
 
 
