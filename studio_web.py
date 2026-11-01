@@ -849,10 +849,10 @@ def main(argv=None):
                    voice_model_en=a.voice_model_en, voice_license_ref_en=a.voice_license_ref_en,
                    musetalk_dir=a.musetalk_dir, musetalk_python=a.musetalk_python)
     print(f"Studio UGC (sans générateur payant) : http://{a.host}:{a.port}", flush=True)
-    if docker_private:
-        # The private token is available in the server's chmod-600 .env file.
-        # Avoid copying long-lived secrets to Docker's persistent logs.
-        print("Jeton : consulter le fichier local .env de l'installateur.", flush=True)
+    if docker_private or os.environ.get("UGC_STUDIO_TOKEN_FILE"):
+        # GPU systemd and CPU Docker must never send long-lived tokens to logs.
+        # Their token is held in a chmod-600 file, not printed by the process.
+        print("Jeton : consulter le fichier local sécurisé de l'installateur.", flush=True)
     else:
         print(f"Jeton de connexion (à saisir dans le navigateur) : {token}", flush=True)
     try:
