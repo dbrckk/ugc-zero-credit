@@ -231,6 +231,44 @@ class Studio(ThreadingHTTPServer):
         self.jobs: dict[str, dict] = {}
         self.jobs_lock = threading.Lock()
         self.upload_lock = threading.Lock()
+        # Limit expensive CUDA diagnostics to a single request and cache briefly.
+        self.presenter_status_lock = threading.Lock()
+        self.presenter_diagnostic_cache: tuple[float, dict] | None = None
+        self.presenter_diagnostic_running = False
+
+    def presenter_readiness(self) -> dict:
+        if not self.musetalk_dir or not self.musetalk_python:
+            return {"configured": False, "ready": False, "code": "not_configured",
+                    "message": "Configurer MuseTalk et Python CUDA sur le serveur."}
+        with self.presenter_status_lock:
+            cache = self.presenter_diagnostic_cache
+            if cache and time.monotonic() - cache[0] < 120:
+                return cache[1].copy()
+            if self.presenter_diagnostic_running:
+                return {"configured": True, "ready": False, "code": "checking",
+                        "message": "Diagnostic GPU déjà en cours : relancer dans quelques secondes."}
+            self.presenter_diagnostic_running = True
+        try:
+            require_musetalk(self.musetalk_dir, self.musetalk_python)
+            result = {"configured": True, "ready": True, "code": "ready",
+                      "message": "CUDA, modèles MuseTalk et interface CLI vérifiés. La qualité de sortie reste à contrôler."}
+        except (FileNotFoundError, ValueError) as exc:
+            result = {"configured": True, "ready": False, "code": "missing_installation",
+                      "message": "Installation MuseTalk ou modèles locaux incomplets."}
+        except RuntimeError as exc:
+            code = "incompatible_cli" if "Interface MuseTalk incompatible" in str(exc) else "cuda_unavailable"
+            result = {"configured": True, "ready": False, "code": code,
+                      "message": "Interface MuseTalk incompatible." if code == "incompatible_cli"
+                      else "CUDA ou PyTorch GPU indisponible."}
+        except (subprocess.TimeoutExpired, OSError) as exc:
+            result = {"configured": True, "ready": False, "code": "diagnostic_failed",
+                      "message": "Diagnostic GPU impossible ou trop lent."}
+        finally:
+            with self.presenter_status_lock:
+                if "result" in locals():
+                    self.presenter_diagnostic_cache = (time.monotonic(), result.copy())
+                self.presenter_diagnostic_running = False
+        return result
 
     def shutdown(self):
         super().shutdown()
@@ -389,6 +427,8 @@ class Handler(BaseHTTPRequestHandler):
                                                 "voice_languages": available_languages(self.server.voice_models),
                                                 "presenter_gpu_configured": bool(self.server.musetalk_dir and self.server.musetalk_python),
                                                 "presenter_gpu_verified": False})
+            if parts == ["", "api", "presenter", "readiness"]:
+                return self.json_response(200, {"ok": True, **self.server.presenter_readiness()})
             if parts == ["", "api", "projects"]:
                 data = self.server.root
                 entries = []
@@ -651,11 +691,10 @@ class Handler(BaseHTTPRequestHandler):
             return self.error_response(409, "Quota du projet ou réserve disque insuffisant pour MuseTalk")
         if not (project / "media").is_dir() or (project / "media").is_symlink():
             raise ValueError("Dossier média invalide")
-        # Fail before admission; a CPU-only Docker studio must not queue fake GPU work.
-        try:
-            require_musetalk(self.server.musetalk_dir, self.server.musetalk_python)
-        except (RuntimeError, FileNotFoundError, ValueError) as exc:
-            return self.error_response(503, "MuseTalk local indisponible : " + str(exc)[:500])
+        # Fail before admission; never queue fictitious GPU work.
+        readiness = self.server.presenter_readiness()
+        if not readiness["ready"]:
+            return self.error_response(503, readiness["message"])
         with self.server.jobs_lock:
             decision = admission(self.server.jobs, pid)
             if decision == "already_running":
