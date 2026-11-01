@@ -20,7 +20,7 @@ Le manifeste de rendu précise si la source est un portrait fixe ou une vidéo a
 
 ## Utilisation Android
 
-Depuis ton studio privé (CPU + MuseTalk GPU correctement configuré), importer **la vidéo autorisée** dans les médias du projet puis générer ou sélectionner un WAV Piper FR/EN. Dans la section *Influenceuse animée*, sélectionner le clip, préciser l'autorisation du média et le consentement du sujet, vérifier le GPU, puis demander la vidéo parlante. Le MP4 apparaît dans la médiathèque après une exécution GPU réelle et reste à contrôler avant intégration à la publicité.
+Depuis ton studio privé (CPU + MuseTalk GPU correctement configuré), importer **la vidéo autorisée** dans les médias du projet puis générer ou sélectionner un WAV Piper FR/EN. Dans la section *Influenceuse animée*, sélectionner le clip, préciser l'autorisation du média et le consentement du sujet, vérifier le GPU, puis demander la vidéo parlante. Le MP4 apparaît dans la médiathèque après une exécution GPU réelle et reste à contrôler avant intégration à la publicité. Le bouton **Ajouter la vidéo IA au montage** insère directement le dernier rendu MuseTalk dans le storyboard ; le choix automatique d'une nouvelle séquence parlée privilégie également ce rendu plutôt que le clip source sans lip-sync.
 
 Les vidéos importées sont maintenant prévisualisables dans la médiathèque Android, même avant la génération MuseTalk.
 
