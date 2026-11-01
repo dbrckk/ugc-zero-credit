@@ -25,7 +25,6 @@ FILES = (
     ("openai/whisper-tiny", "pytorch_model.bin", "whisper"),
     ("openai/whisper-tiny", "preprocessor_config.json", "whisper"),
     ("yzd-v/DWPose", "dw-ll_ucoco_384.pth", "dwpose"),
-    ("ByteDance/LatentSync", "latentsync_syncnet.pt", "syncnet"),
 )
 
 def fetch(root: Path) -> None:
