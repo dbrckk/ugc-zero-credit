@@ -14,15 +14,15 @@ Lorsque la bande sonore contient une pause exploitable proche du changement de p
 
 ## Vérification
 
-Le fichier \`*.report.json\` ajoute :
+Le fichier `*.report.json` ajoute :
 
-- \`scene_cut_method\` : méthode de calcul.
-- \`scene_cut_times\` : instants de passage entre photos, en secondes.
-- \`scene_durations\` : durées des plans, chevauchement de transition inclus.
-- \`narration_pauses_detected\` : nombre de pauses mesurées.
-- \`scene_cuts_near_pauses\` : nombre de coupes rapprochées de pauses.
+- `scene_cut_method` : méthode de calcul.
+- `scene_cut_times` : instants de passage entre photos, en secondes.
+- `scene_durations` : durées des plans, chevauchement de transition inclus.
+- `narration_pauses_detected` : nombre de pauses mesurées.
+- `scene_cuts_near_pauses` : nombre de coupes rapprochées de pauses.
 
-Le workflow \`.github/workflows/v14-narrated-validation.yml\` exécute des tests avec un vrai WAV synthétique de pauses, un vrai WAV Piper anglais, deux photos et des MP4 H.264/AAC en aperçu et Full HD. Les anciens contrôles et la construction Docker sont conservés.
+Le workflow `.github/workflows/v14-narrated-validation.yml` exécute des tests avec un vrai WAV synthétique de pauses, un vrai WAV Piper anglais, deux photos et des MP4 H.264/AAC en aperçu et Full HD. Les anciens contrôles et la construction Docker sont conservés.
 
 ## Limites
 
@@ -30,8 +30,8 @@ L'absence de pause n'autorise pas à supposer la fin d'une phrase. Cette synchro
 
 Mise à jour du serveur existant :
 
-\`\`\`bash
+```bash
 cd ugc-zero-credit
 git pull --ff-only origin main
 bash install_studio.sh
-\`\`\`
+```
