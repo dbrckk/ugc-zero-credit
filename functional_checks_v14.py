@@ -2,6 +2,7 @@
 """Real authenticated Piper -> photo uploads -> FFmpeg preview and Full-HD."""
 from __future__ import annotations
 import json
+import math
 import os
 from pathlib import Path
 import struct
@@ -10,11 +11,13 @@ import tempfile
 import threading
 import time
 import unittest
+import wave
 import zlib
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 from studio_web import Handler, Studio
 from narrated_short import inspect_narration, DISCLOSURE, layout_title
+from speech_scene_timing import plan_scenes
 
 def png(rgb, w=320, h=400):
     raw = b"".join(b"\0" + bytes(rgb)*w for _ in range(h))
@@ -71,6 +74,32 @@ class V14RealEndToEnd(unittest.TestCase):
             time.sleep(.4)
         self.fail("Timeout while creating real "+kind)
 
+    def test_00_actual_silence_guides_cuts_without_paid_inference(self):
+        """Create a WAV with two pauses and verify fade overlap mathematics."""
+        with tempfile.TemporaryDirectory(prefix="ugc-v20-pacing-") as temp:
+            path = Path(temp) / "narration.wav"
+            rate = 16000
+            with wave.open(str(path), "wb") as audio:
+                audio.setnchannels(1)
+                audio.setsampwidth(2)
+                audio.setframerate(rate)
+                sound = bytearray()
+                for sample in range(rate * 6):
+                    time_s = sample / rate
+                    silent = 1.7 <= time_s < 2.1 or 3.7 <= time_s < 4.1
+                    amplitude = 0 if silent else round(11000 * math.sin(2 * math.pi * 220 * time_s))
+                    sound.extend(struct.pack("<h", amplitude))
+                audio.writeframes(sound)
+            plan = plan_scenes(path, 6.0, 3, .3)
+            self.assertEqual(plan["pause_matches"], 2, plan)
+            self.assertAlmostEqual(plan["cut_times"][0], 1.9, delta=.04)
+            self.assertAlmostEqual(plan["cut_times"][1], 3.9, delta=.04)
+            self.assertAlmostEqual(sum(plan["scene_durations"]) - .6, 6, delta=.0001)
+            self.assertEqual(len(plan["transition_offsets"]), 2)
+            self.assertLess(plan["transition_offsets"][0], plan["transition_offsets"][1])
+            single = plan_scenes(path, 6, 1, 0)
+            self.assertEqual(single["scene_durations"], [6])
+
     def test_01_setup_and_real_english_voice(self):
         self.assertEqual(self.call("/api/projects",auth=False)[0],401)
         status,res=self.call("/api/projects","POST",{"name":"Real V14 test"})
@@ -126,6 +155,13 @@ class V14RealEndToEnd(unittest.TestCase):
         self.assertEqual(report["visual_text_layout"],"cinematic_parallax_product_stage_v19")
         self.assertEqual(report["photo_motion"],"independent_foreground_entry_and_background_zoom")
         self.assertEqual(report["transition_styles"],["smoothright"])
+        self.assertEqual(report["scene_cut_method"],"ffmpeg_silence_pauses_with_even_fallback_v20")
+        self.assertEqual(len(report["scene_cut_times"]),1)
+        self.assertEqual(len(report["scene_durations"]),2)
+        self.assertGreater(report["scene_cut_times"][0],.5)
+        self.assertLess(report["scene_cut_times"][0],report["duration"]-.5)
+        self.assertAlmostEqual(sum(report["scene_durations"])-.3,report["duration"],delta=.4)
+        self.assertLessEqual(report["scene_cuts_near_pauses"],1)
         self.assertGreaterEqual(report["photo_frame_px"],8)
         self.assertGreaterEqual(report["photo_entrance_ms"],320)
         self.assertTrue(report["scene_counter"])
