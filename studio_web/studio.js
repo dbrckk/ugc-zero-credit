@@ -64,7 +64,7 @@ function updateVoiceChoices(){
  $('voiceAvailability').textContent=states.join(' · ')+'. Le texte n’est pas traduit automatiquement. La voix produite n’est pas synchronisée avec une vidéo.';
  $('voiceGenerate').disabled=!voiceLanguages.includes(select.value);
 }
-function renderMedia(){const box=$('mediaGrid');box.replaceChildren();for(const m of project.media){const card=el('div',null,'media-item');card.append(el('div',m.file.slice(6),'name'));const props=[m.type,m.bytes?Math.round(m.bytes/1024)+' Ko':'',m.duration?m.duration+' s':'',m.language?({fr:'Français',en:'English'}[m.language]||m.language):'',m.has_audio===false&&m.type==='video'?'sans audio':''].filter(Boolean).join(' · ');card.append(el('small',props));if(m.type==='image'){const pic=el('img');pic.src=m.url;pic.alt=m.file.slice(6);card.append(pic);}if(m.type==='audio'){const player=el('audio');player.controls=true;player.preload='none';player.src=m.url;card.append(player);}if(m.type==='video'&&m.generated_by==='musetalk_local'){const player=el('video');player.controls=true;player.playsInline=true;player.preload='metadata';player.src=m.url;card.append(player);const link=el('a','Télécharger cette vidéo');link.href=m.url;link.download=m.file.slice(6);link.rel='noreferrer';card.append(link);}box.append(card);}if(!project.media.length)box.append(el('p','Aucun média importé.','hint'));renderNarratedOptions();renderPresenterOptions();}
+function renderMedia(){const box=$('mediaGrid');box.replaceChildren();for(const m of project.media){const card=el('div',null,'media-item');card.append(el('div',m.file.slice(6),'name'));const props=[m.type,m.bytes?Math.round(m.bytes/1024)+' Ko':'',m.duration?m.duration+' s':'',m.language?({fr:'Français',en:'English'}[m.language]||m.language):'',m.has_audio===false&&m.type==='video'?'sans audio':''].filter(Boolean).join(' · ');card.append(el('small',props));if(m.type==='image'){const pic=el('img');pic.src=m.url;pic.alt=m.file.slice(6);card.append(pic);}if(m.type==='audio'){const player=el('audio');player.controls=true;player.preload='none';player.src=m.url;card.append(player);}if(m.type==='video'){const player=el('video');player.controls=true;player.playsInline=true;player.preload='metadata';player.src=m.url;card.append(player);const link=el('a','Télécharger cette vidéo');link.href=m.url;link.download=m.file.slice(6);link.rel='noreferrer';card.append(link);}box.append(card);}if(!project.media.length)box.append(el('p','Aucun média importé.','hint'));renderNarratedOptions();renderPresenterOptions();}
 function clipCard(clip,i){const card=el('div',null,'entry');const head=el('div',null,'entry-head');head.append(el('b','Plan parlé '+(i+1)));const rem=el('button','Retirer','danger');rem.type='button';rem.addEventListener('click',()=>{collectForm();draft.talking_clips.splice(i,1);draft.srt_assignments=draft.srt_assignments.filter(x=>x.clip!==i).map(x=>({...x,clip:x.clip>i?x.clip-1:x.clip}));renderEditor();});head.append(rem);card.append(head);
  fileDrop(card,'Vidéo avec voix native','video',clip.file,x=>clip.file=x);
  const times=el('div',null,'grid-three');field(times,'Début source (s)','number',clip.source_in,x=>clip.source_in=x,{min:0,step:'.001'});field(times,'Durée (s)','number',clip.duration,x=>clip.duration=x,{min:.1,step:'.001'});dropdown(times,'Cadrage',[['off','Original'],['face','Visage (OpenCV)']],clip.smart_crop,x=>clip.smart_crop=x);card.append(times);
@@ -123,10 +123,11 @@ function renderPresenterOptions(){
  option(portrait,'','— Sélectionner un portrait —');
  for(const m of project.media.filter(x=>x.type==='audio'&&x.generated_by==='piper_local'))
    option(audio,m.file,(m.language==='en'?'English':'Français')+' · '+m.file.slice(6));
- for(const m of project.media.filter(x=>x.type==='image'&&/\.(png|jpg|jpeg)$/i.test(x.file)))
-   option(portrait,m.file,m.file.slice(6));
+ for(const m of project.media.filter(x=>(x.type==='image'&&/\.(png|jpg|jpeg)$/i.test(x.file))||(x.type==='video'&&/\.(mp4|mov|mkv)$/i.test(x.file))))
+   option(portrait,m.file,(m.type==='video'?'Clip animé · ':'Portrait fixe · ')+m.file.slice(6));
  if([...audio.options].some(x=>x.value===priorAudio))audio.value=priorAudio;
  if([...portrait.options].some(x=>x.value===priorPortrait))portrait.value=priorPortrait;
+ else if(portrait.options.length>1)portrait.value=portrait.options[1].value;
  $('presenterAvailability').textContent=presenterDiagnostic||
   (presenterConfigured?'Diagnostic GPU non encore effectué.':'MuseTalk non configuré : installation CUDA requise.');
  const job=project.job||{};
