@@ -1,7 +1,7 @@
 name: V14 real narrated photo Shorts — local CPU Piper plus FFmpeg
 on:
   push:
-    branches: [feat/v14-narrated-photo-shorts, feat/v15-short-visual-polish, feat/v16-visual-storytelling, fix/v17-output-symlink-safety, feat/v18-animated-headline-progress, feat/v19-cinematic-photo-stage, feat/v20-audio-aware-scene-cuts, feat/v21-private-musetalk-android, feat/v22-presenter-readiness-av-qa, feat/v23-moving-presenter-video, feat/v24-gpu-host-bootstrap, feat/v25-kaggle-gpu-batch]
+    branches: [feat/v14-narrated-photo-shorts, feat/v15-short-visual-polish, feat/v16-visual-storytelling, fix/v17-output-symlink-safety, feat/v18-animated-headline-progress, feat/v19-cinematic-photo-stage, feat/v20-audio-aware-scene-cuts, feat/v21-private-musetalk-android, feat/v22-presenter-readiness-av-qa, feat/v23-moving-presenter-video, feat/v24-gpu-host-bootstrap, feat/v25-kaggle-gpu-batch, feat/v26-kaggle-one-command-automation]
   workflow_dispatch:
 permissions:
   contents: read
@@ -29,6 +29,7 @@ jobs:
           fi
           grep -q 'Utilisation :' gpu-acceptance.log
           rm -f gpu-doctor.log gpu-acceptance.log
+          bash -n gpu_host.sh gpu_acceptance.sh
       - name: Install real FFmpeg, font and pinned Piper CPU
         run: |
           sudo apt-get update -qq
@@ -36,7 +37,7 @@ jobs:
           python -m pip install 'piper-tts==1.8.0'
       - name: Verify Kaggle notebook structure and actual clip validation, without any GPU download
         run: |
-          python -m compileall -q kaggle_musetalk.py
+          python -m compileall -q kaggle_musetalk.py kaggle_automate.py functional_checks_v26_kaggle.py
           python - <<'PY'
           import json
           import subprocess
@@ -71,6 +72,19 @@ jobs:
                                        capture_output=True, text=True, timeout=35)
               assert failure.returncode != 0 and "language.txt" in failure.stderr
           print("Validated real encoded input, CPU refusal, notebook configuration and privacy gates")
+          PY
+      - name: Test complete private Kaggle API orchestration control plane
+        run: |
+          python -m compileall -q kaggle_automate.py functional_checks_v26_kaggle.py
+          python functional_checks_v26_kaggle.py
+          python - <<'PY'
+          from pathlib import Path
+          yml = Path(".github/workflows/kaggle-private-gpu.yml").read_text()
+          assert "workflow_dispatch:" in yml
+          assert "KAGGLE_API_TOKEN" in yml
+          assert "cancel-in-progress: false" in yml
+          assert "kaggle_automate.py" in yml
+          assert "schedule:" not in yml
           PY
       - name: Download public FR/EN test voices only
         run: |
