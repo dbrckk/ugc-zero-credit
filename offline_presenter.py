@@ -453,12 +453,16 @@ def main(argv=None):
         choice = sp.add_mutually_exclusive_group(required=True)
         choice.add_argument("--text")
         choice.add_argument("--text-file", type=Path)
-        sp.add_argument("--voice-model", required=True, type=Path)
+        if name == "presenter":
+            choice.add_argument("--existing-narration", type=Path,
+                                help="WAV Piper déjà généré et signé ; aucun recalcul de la voix")
+        sp.add_argument("--voice-model", required=(name == "voice"), type=Path)
         sp.add_argument("--voice-license-ref", required=True)
         sp.add_argument("--confirm-voice-rights", action="store_true")
         sp.add_argument("--output", required=True, type=Path)
         if name == "presenter":
-            sp.add_argument("--image", required=True, type=Path)
+            sp.add_argument("--source", "--image", dest="image", required=True, type=Path,
+                            help="Portrait JPEG/PNG ou clip animé MP4/MOV/MKV")
             sp.add_argument("--image-rights-ref", required=True)
             sp.add_argument("--confirm-image-rights", action="store_true")
             sp.add_argument("--musetalk-dir", required=True, type=Path)
@@ -474,7 +478,10 @@ def main(argv=None):
                 require_musetalk(a.musetalk_dir, a.musetalk_python)
                 result["musetalk"] = "CUDA_AVAILABLE"
         else:
-            text = a.text if a.text is not None else a.text_file.read_text(encoding="utf-8")
+            text = a.text if a.text is not None else (a.text_file.read_text(encoding="utf-8")
+                if a.text_file else "")
+            if a.command == "presenter" and a.existing_narration is None and a.voice_model is None:
+                raise ValueError("--voice-model requis lors de la synthèse d’une nouvelle voix")
             if a.command == "voice":
                 result = synthesize(text, a.voice_model, a.output,
                                     voice_license_ref=a.voice_license_ref,
@@ -485,7 +492,8 @@ def main(argv=None):
                                    output=a.output, voice_license_ref=a.voice_license_ref,
                                    image_rights_ref=a.image_rights_ref,
                                    confirm_voice_rights=a.confirm_voice_rights,
-                                   confirm_image_rights=a.confirm_image_rights)
+                                   confirm_image_rights=a.confirm_image_rights,
+                                   existing_narration=a.existing_narration)
         print(json.dumps(result, ensure_ascii=False, indent=2))
     except (ValueError, FileNotFoundError, FileExistsError, RuntimeError,
             OSError, subprocess.TimeoutExpired) as exc:
