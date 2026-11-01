@@ -27,7 +27,7 @@ from urllib.parse import parse_qs, urlparse, quote
 from ugc import build, probe, verify
 from subtitle_import import parse_srt
 from studio_scheduling import admission, is_active
-from offline_presenter import clean_text, synthesize
+from offline_presenter import clean_text, synthesize, presenter, require_musetalk
 from voice_catalog import configure_voices, pick_voice, available_languages
 from narrated_short import clean_title, inspect_narration, inspect_photos, render_short, MAX_IMAGES
 
@@ -213,13 +213,16 @@ class Studio(ThreadingHTTPServer):
     def __init__(self, address, handler, root: Path, token: str,
                  voice_model: Path | None = None, voice_license_ref: str = "",
                  voice_model_fr: Path | None = None, voice_license_ref_fr: str = "",
-                 voice_model_en: Path | None = None, voice_license_ref_en: str = ""):
+                 voice_model_en: Path | None = None, voice_license_ref_en: str = "",
+                 musetalk_dir: Path | None = None, musetalk_python: Path | None = None):
         # Validate all models and language codes before opening a listening socket.
         self.voice_models = configure_voices(
             legacy_model=voice_model, legacy_license=voice_license_ref,
             french_model=voice_model_fr, french_license=voice_license_ref_fr,
             english_model=voice_model_en, english_license=voice_license_ref_en)
         self.voice_language = next(iter(self.voice_models.values()))["locale"] if len(self.voice_models) == 1 else ""
+        self.musetalk_dir = musetalk_dir
+        self.musetalk_python = musetalk_python
         super().__init__(address, handler)
         self.root = root.resolve()
         self.root.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -383,7 +386,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self.json_response(200, {"ok": True, "service": "ugc-zero-credit-web", "paid_generators": False,
                                                 "voice_generation_enabled": bool(self.server.voice_models),
                                                 "voice_language": self.server.voice_language,
-                                                "voice_languages": available_languages(self.server.voice_models)})
+                                                "voice_languages": available_languages(self.server.voice_models),
+                                                "presenter_gpu_configured": bool(self.server.musetalk_dir and self.server.musetalk_python),
+                                                "presenter_gpu_verified": False})
             if parts == ["", "api", "projects"]:
                 data = self.server.root
                 entries = []
@@ -503,6 +508,8 @@ class Handler(BaseHTTPRequestHandler):
                                                          "error": "Échec de génération vocale ; consulter les journaux privés"}
                     self.server.executor.submit(work_voice)
                     return self.json_response(202, {"ok": True, "status": "queued", "kind": "voice", "language": lang})
+                if action == "presenter":
+                    return self.create_presenter(project, pid)
                 if action == "narrated":
                     request = self.json_request()
                     if not isinstance(request, dict):
@@ -609,6 +616,87 @@ class Handler(BaseHTTPRequestHandler):
         except Exception:
             self.error_response(500, "Erreur interne (vérifier les logs du serveur)")
 
+    def create_presenter(self, project: Path, pid: str):
+        """Private, opt-in GPU renderer. No remote inference or public exposure."""
+        request = self.json_request()
+        if not isinstance(request, dict):
+            raise ValueError("Formulaire de présentatrice invalide")
+        if not self.server.musetalk_dir or not self.server.musetalk_python:
+            return self.error_response(503, "MuseTalk GPU non configuré sur ce serveur")
+        if (request.get("confirm_portrait_rights") is not True
+                or request.get("confirm_voice_rights") is not True
+                or request.get("confirm_subject_consent") is not True):
+            return self.error_response(400, "Confirmer droits du portrait, voix et consentement du sujet")
+        rights_ref = request.get("portrait_rights_ref")
+        if not isinstance(rights_ref, str) or not 8 <= len(rights_ref.strip()) <= 500:
+            raise ValueError("Fournir une référence de droits du portrait (8–500 caractères)")
+        indexed = {m["file"]: m for m in json.loads((project / "media.json").read_text(encoding="utf-8"))}
+        voice_name = request.get("audio")
+        portrait_name = request.get("portrait")
+        voice_item = indexed.get(voice_name) if isinstance(voice_name, str) else None
+        portrait_item = indexed.get(portrait_name) if isinstance(portrait_name, str) else None
+        if not voice_item or voice_item.get("generated_by") != "piper_local" or voice_item.get("type") != "audio":
+            raise ValueError("Choisir un WAV Piper produit dans ce projet")
+        if not portrait_item or portrait_item.get("type") != "image":
+            raise ValueError("Choisir un portrait autorisé du projet")
+        wav = safe_uploaded_file(project, voice_name)
+        photo = safe_uploaded_file(project, portrait_name)
+        if photo.suffix.lower() not in {".jpg", ".jpeg", ".png"}:
+            raise ValueError("Portrait MuseTalk : JPEG ou PNG uniquement")
+        inspect_photos([photo])
+        voice_info = inspect_narration(wav, voice_item.get("voice_sha256"))
+        if not (project / "media").is_dir() or (project / "media").is_symlink():
+            raise ValueError("Dossier média invalide")
+        # Fail before admission; a CPU-only Docker studio must not queue fake GPU work.
+        try:
+            require_musetalk(self.server.musetalk_dir, self.server.musetalk_python)
+        except (RuntimeError, FileNotFoundError, ValueError) as exc:
+            return self.error_response(503, "MuseTalk local indisponible : " + str(exc)[:500])
+        with self.server.jobs_lock:
+            decision = admission(self.server.jobs, pid)
+            if decision == "already_running":
+                return self.error_response(409, "Un travail existe déjà pour ce projet")
+            if decision == "server_busy":
+                return self.error_response(429, "Serveur occupé : attendre la fin du travail")
+            self.server.jobs[pid] = {"status": "queued", "kind": "presenter", "language": voice_info["language"]}
+        video_file = project / "media" / ("presenter_" + secrets.token_hex(8) + ".mp4")
+        def work_presenter():
+            with self.server.jobs_lock:
+                self.server.jobs[pid] = {"status": "running", "kind": "presenter", "language": voice_info["language"]}
+            try:
+                report = presenter(text="", model=None, image=photo,
+                    musetalk=self.server.musetalk_dir, interpreter=self.server.musetalk_python,
+                    output=video_file, voice_license_ref=voice_info["voice_license_ref"],
+                    image_rights_ref=rights_ref.strip(), confirm_voice_rights=True,
+                    confirm_image_rights=True, existing_narration=wav)
+                with self.server.upload_lock:
+                    media = json.loads((project / "media.json").read_text(encoding="utf-8"))
+                    size = video_file.stat().st_size
+                    if (len(media) >= MAX_FILES
+                            or sum(item.get("bytes", 0) for item in media) + size > MAX_PROJECT_BYTES
+                            or shutil.disk_usage(project).free < MIN_FREE_BYTES):
+                        raise ValueError("Quota média / réserve disque insuffisants")
+                    item = {"file": "media/" + video_file.name, "bytes": size,
+                            **summarize_media(video_file), "generated_by": "musetalk_local",
+                            "language": voice_info["language"], "lip_sync_verified": False,
+                            "human_review_required": True}
+                    media.append(item)
+                    store_json(project / "media.json", media)
+                with self.server.jobs_lock:
+                    self.server.jobs[pid] = {"status": "completed", "kind": "presenter",
+                        "output": item["file"], "duration": report["video_seconds"],
+                        "human_review_required": True, "language": voice_info["language"]}
+            except Exception:
+                video_file.unlink(missing_ok=True)
+                video_file.with_suffix(".presenter.json").unlink(missing_ok=True)
+                with self.server.jobs_lock:
+                    self.server.jobs[pid] = {"status": "failed", "kind": "presenter",
+                        "language": voice_info["language"],
+                        "error": "Échec MuseTalk local : consulter les journaux privés"}
+        self.server.executor.submit(work_presenter)
+        return self.json_response(202, {"ok": True, "status": "queued",
+            "kind": "presenter", "language": voice_info["language"]})
+
     def upload(self, project: Path, query: dict):
         name = query.get("filename", [""])[0]
         if not SAFE_NAME.fullmatch(name) or name.startswith(".") or Path(name).suffix.lower() not in ALLOWED_UPLOADS:
@@ -683,6 +771,10 @@ def main(argv=None):
     parser.add_argument("--voice-license-ref-fr", default="", help="Référence de droits française")
     parser.add_argument("--voice-model-en", type=Path, help="Modèle ONNX de voix anglaise")
     parser.add_argument("--voice-license-ref-en", default="", help="Référence de droits anglaise")
+    parser.add_argument("--musetalk-dir", type=Path, default=Path(os.environ["UGC_MUSETALK_DIR"]) if os.environ.get("UGC_MUSETALK_DIR") else None,
+                        help="Dossier MuseTalk local (NVIDIA GPU uniquement)")
+    parser.add_argument("--musetalk-python", type=Path, default=Path(os.environ["UGC_MUSETALK_PYTHON"]) if os.environ.get("UGC_MUSETALK_PYTHON") else None,
+                        help="Python CUDA local dédié à MuseTalk")
     a = parser.parse_args(argv)
     # Docker publishes 127.0.0.1 on the HOST, but requires binding to all
     # interfaces INSIDE its isolated bridge network. Never permit this mode
@@ -699,7 +791,8 @@ def main(argv=None):
     httpd = Studio((a.host, a.port), Handler, a.data, token,
                    voice_model=a.voice_model, voice_license_ref=a.voice_license_ref,
                    voice_model_fr=a.voice_model_fr, voice_license_ref_fr=a.voice_license_ref_fr,
-                   voice_model_en=a.voice_model_en, voice_license_ref_en=a.voice_license_ref_en)
+                   voice_model_en=a.voice_model_en, voice_license_ref_en=a.voice_license_ref_en,
+                   musetalk_dir=a.musetalk_dir, musetalk_python=a.musetalk_python)
     print(f"Studio UGC (sans générateur payant) : http://{a.host}:{a.port}", flush=True)
     if docker_private:
         # The private token is available in the server's chmod-600 .env file.
