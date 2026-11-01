@@ -1,7 +1,7 @@
 name: V14 real narrated photo Shorts — local CPU Piper plus FFmpeg
 on:
   push:
-    branches: [feat/v14-narrated-photo-shorts, feat/v15-short-visual-polish, feat/v16-visual-storytelling, fix/v17-output-symlink-safety, feat/v18-animated-headline-progress, feat/v19-cinematic-photo-stage, feat/v20-audio-aware-scene-cuts, feat/v21-private-musetalk-android, feat/v22-presenter-readiness-av-qa, feat/v23-moving-presenter-video, feat/v24-gpu-host-bootstrap]
+    branches: [feat/v14-narrated-photo-shorts, feat/v15-short-visual-polish, feat/v16-visual-storytelling, fix/v17-output-symlink-safety, feat/v18-animated-headline-progress, feat/v19-cinematic-photo-stage, feat/v20-audio-aware-scene-cuts, feat/v21-private-musetalk-android, feat/v22-presenter-readiness-av-qa, feat/v23-moving-presenter-video, feat/v24-gpu-host-bootstrap, feat/v25-kaggle-gpu-batch]
   workflow_dispatch:
 permissions:
   contents: read
@@ -34,6 +34,44 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y ffmpeg fonts-dejavu-core
           python -m pip install 'piper-tts==1.8.0'
+      - name: Verify Kaggle notebook structure and actual clip validation, without any GPU download
+        run: |
+          python -m compileall -q kaggle_musetalk.py
+          python - <<'PY'
+          import json
+          import subprocess
+          import sys
+          import tempfile
+          from pathlib import Path
+
+          nb = json.loads(Path("kaggle/ugc_musetalk_gpu.ipynb").read_text(encoding="utf-8"))
+          assert nb["nbformat"] == 4
+          assert len(nb["cells"]) >= 5
+          code = "\n".join("".join(c["source"]) for c in nb["cells"] if c["cell_type"] == "code")
+          assert "--stage','preflight'" in code and "--stage','all'" in code
+          with tempfile.TemporaryDirectory(prefix="ugc-kaggle-real-") as tmp:
+              folder = Path(tmp) / "private-assets"
+              folder.mkdir()
+              video = folder / "presenter.mp4"
+              subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+                              "-f", "lavfi", "-i", "testsrc2=s=320x512:r=25", "-t", "1.3",
+                              "-c:v", "libx264", "-preset", "ultrafast", str(video)],
+                             check=True, capture_output=True, timeout=75)
+              (folder / "script.txt").write_text("Bonjour, voici notre véritable essai vidéo local.")
+              (folder / "language.txt").write_text("fr")
+              (folder / "portrait_rights.txt").write_text("Autorisation laboratoire de validation CI, usage fictif")
+              cmd = [sys.executable, "kaggle_musetalk.py", "--input-root", str(Path(tmp))]
+              subprocess.run([*cmd, "--stage", "check-assets"], check=True, timeout=35)
+              failure = subprocess.run([*cmd, "--stage", "preflight"],
+                                       capture_output=True, text=True, timeout=35)
+              assert failure.returncode != 0
+              assert "Kaggle" in failure.stderr or "GPU" in failure.stderr
+              (folder / "language.txt").write_text("invalid")
+              failure = subprocess.run([*cmd, "--stage", "check-assets"],
+                                       capture_output=True, text=True, timeout=35)
+              assert failure.returncode != 0 and "language.txt" in failure.stderr
+          print("Validated real encoded input, CPU refusal, notebook configuration and privacy gates")
+          PY
       - name: Download public FR/EN test voices only
         run: |
           python -m piper.download_voices fr_FR-siwis-medium en_US-lessac-medium --data-dir "$RUNNER_TEMP/ugc-voices"
@@ -43,7 +81,7 @@ jobs:
         env:
           UGC_TEST_PIPER_MODEL: ${{ runner.temp }}/ugc-voices/fr_FR-siwis-medium.onnx
           UGC_TEST_PIPER_MODEL_EN: ${{ runner.temp }}/ugc-voices/en_US-lessac-medium.onnx
-          UGC_V16_ARTIFACTS_DIR: ${{ runner.temp }}/ugc-v24-frames
+          UGC_V16_ARTIFACTS_DIR: ${{ runner.temp }}/ugc-v25-frames
         run: |
           python -m compileall -q studio_web.py narrated_short.py offline_presenter.py speech_scene_timing.py functional_checks_v14.py
           node --check studio_web/studio.js
@@ -56,8 +94,8 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ugc-v24-gpu-boot-frames
-          path: ${{ runner.temp }}/ugc-v24-frames/*.png
+          name: ugc-v25-kaggle-frames
+          path: ${{ runner.temp }}/ugc-v25-frames/*.png
           if-no-files-found: ignore
           retention-days: 3
       - name: Build real private Docker studio (two ONNX voice models)
