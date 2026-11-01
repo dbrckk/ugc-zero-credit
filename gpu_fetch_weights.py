@@ -39,15 +39,16 @@ def fetch(root: Path) -> None:
         target = models / subdir / filename
         if target.is_symlink():
             raise ValueError("Lien symbolique de poids interdit : " + str(target))
-        if target.is_file() and target.stat().st_size > 4096:
+        minimum = 100_000 if target.suffix in {".pth", ".bin"} else 10
+        if target.is_file() and target.stat().st_size >= minimum:
             continue
         local_dir = models / subdir
         local_dir.mkdir(parents=True, exist_ok=True)
         print("Téléchargement officiel :", repo_id, filename, flush=True)
         hf_hub_download(repo_id=repo_id, filename=filename,
                         local_dir=str(local_dir), local_dir_use_symlinks=False)
-        if not target.is_file() or target.stat().st_size <= 4096:
-            raise RuntimeError("Poids manquant : " + str(target))
+        if not target.is_file() or target.stat().st_size < minimum:
+            raise RuntimeError("Fichier de modèle incomplet : " + str(target))
 
     face = models / "face-parse-bisent"
     face.mkdir(exist_ok=True)
