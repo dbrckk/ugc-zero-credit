@@ -154,11 +154,12 @@ def check_results(folder: Path) -> list[Path]:
     for file in root.rglob("*.presenter.json"):
         if file.is_symlink() or not file.resolve().is_relative_to(root):
             raise ValueError("Sortie Kaggle inattendue : lien ou chemin hors du répertoire")
-        video = file.with_suffix(".mp4")  # presenter_X.presenter.json -> presenter_X.mp4
+        video = file.with_name(file.name.removesuffix(".presenter.json") + ".mp4")
         if not video.is_file() or video.is_symlink() or not video.resolve().is_relative_to(root):
             raise ValueError("MP4 manquant ou invalide pour " + file.name)
         report = json.loads(file.read_text(encoding="utf-8"))
-        digest = hashlib.file_digest(video.open("rb"), "sha256").hexdigest()
+        with video.open("rb") as handle:
+            digest = hashlib.file_digest(handle, "sha256").hexdigest()
         if (report.get("sha256") != digest
                 or report.get("gpu_inference_executed") is not True
                 or report.get("ffmpeg_full_decode") is not True
