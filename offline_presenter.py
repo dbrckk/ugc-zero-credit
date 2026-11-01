@@ -193,13 +193,15 @@ def inspect_video(path: Path) -> dict:
 def presenter(*, text: str, model: Path, image: Path, musetalk: Path,
               interpreter: Path, output: Path, voice_license_ref: str,
               image_rights_ref: str, confirm_voice_rights: bool,
-              confirm_image_rights: bool) -> dict:
+              confirm_image_rights: bool,
+              existing_narration: Path | None = None) -> dict:
     """Synthesize actual speech and invoke preinstalled MuseTalk 1.5 locally."""
     if not confirm_voice_rights or not confirm_image_rights:
         raise ValueError("Les droits de la voix et du portrait doivent être confirmés")
     voice_license_ref = required_reference(voice_license_ref, "Licence vocale")
     image_rights_ref = required_reference(image_rights_ref, "Droits du portrait")
-    text = clean_text(text)
+    if existing_narration is None:
+        text = clean_text(text)
     image = image.expanduser().resolve(strict=True)
     if image.suffix.lower() not in IMAGE_FORMATS or not image.is_file():
         raise ValueError("MuseTalk image : fournir un PNG/JPEG de portrait autorisé")
@@ -208,8 +210,18 @@ def presenter(*, text: str, model: Path, image: Path, musetalk: Path,
         raise ValueError("Sortie MP4 absente ou déjà existante / dossier introuvable")
     if out.with_suffix(".presenter.json").exists():
         raise FileExistsError("Le manifeste du futur MP4 existe déjà")
+    # Reuse a signed Piper WAV when available; never resynthesize it.
+    if existing_narration is not None:
+        from narrated_short import inspect_narration, sha256
+        if existing_narration.is_symlink():
+            raise ValueError("Lien symbolique de narration interdit")
+        existing_narration = existing_narration.expanduser().resolve(strict=True)
+        source_voice = inspect_narration(existing_narration, sha256(existing_narration))
+        if source_voice["voice_license_ref"] != voice_license_ref:
+            raise ValueError("La référence de licence de voix doit correspondre au WAV Piper")
+    else:
+        voice_model(model)
     info = require_musetalk(musetalk, interpreter)
-    voice_model(model)
     with tempfile.TemporaryDirectory(prefix="ugc_presenter_") as tmpname:
         tmp = Path(tmpname).resolve()
         if not SAFE_UPSTREAM_PATH.fullmatch(str(tmp)):
@@ -217,8 +229,15 @@ def presenter(*, text: str, model: Path, image: Path, musetalk: Path,
         picture = tmp / ("avatar" + image.suffix.lower())
         shutil.copyfile(image, picture)
         sound = tmp / "voice.wav"
-        voice_meta = synthesize(text, model, sound, voice_license_ref=voice_license_ref,
-                                confirmed=True)
+        if existing_narration is None:
+            voice_meta = synthesize(text, model, sound, voice_license_ref=voice_license_ref,
+                                    confirmed=True)
+        else:
+            shutil.copyfile(existing_narration, sound)
+            voice_meta = {"duration": source_voice["duration"],
+                          "model_sha256": source_voice["model_sha256"],
+                          "wav_sha256": source_voice["sha256"],
+                          "language": source_voice["language"]}
         yaml = tmp / "inference.yaml"
         yaml.write_text(f"ugc_presenter:\n  video_path: {picture}\n  audio_path: {sound}\n  result_name: presenter.mp4\n", encoding="utf-8")
         render_dir = tmp / "musetalk_result"
@@ -230,6 +249,7 @@ def presenter(*, text: str, model: Path, image: Path, musetalk: Path,
                "--unet_model_path", "models/musetalkV15/unet.pth",
                "--unet_config", "models/musetalkV15/musetalk.json",
                "--version", "v15", "--fps", "25", "--batch_size", "4",
+               "--use_float16",
                "--ffmpeg_path", str(Path(shutil.which("ffmpeg") or "/usr/bin/ffmpeg").parent),
                "--output_vid_name", "presenter.mp4"]
         # MuseTalk upstream may use a shared 'temp.mp4' in its working folder.
@@ -265,6 +285,9 @@ def presenter(*, text: str, model: Path, image: Path, musetalk: Path,
             "portrait_rights_ref": image_rights_ref,
             "rights_confirmed_by_operator": True,
             "voice_seconds": voice_meta["duration"],
+            "language": voice_meta["language"],
+            "narration_wav_sha256": voice_meta["wav_sha256"],
+            "reused_existing_narration": existing_narration is not None,
             "video_seconds": meta["duration"],
             "ffmpeg_full_decode": True,
             "human_lip_sync_proven": False,
