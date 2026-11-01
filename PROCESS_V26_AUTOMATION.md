@@ -14,7 +14,7 @@ La configuration initiale est obligatoire car Kaggle ne donne pas accès à un c
 2. Dans GitHub : dbrckk/ugc-zero-credit → Settings → Secrets and variables → Actions → New repository secret. Créer le secret nommé KAGGLE_API_TOKEN contenant ce jeton.
 3. Ajouter dans un dataset Kaggle **privé** les quatre fichiers : presenter.mp4 (ou MOV/MKV), script.txt, language.txt (fr/en), portrait_rights.txt (référence de droits écrits et consentement).
 
-Pour chaque nouveau rendu : ouvrir https://github.com/dbrckk/ugc-zero-credit/actions/workflows/kaggle-private-gpu.yml, cliquer Run workflow, donner son identifiant Kaggle et la référence du dataset privé (utilisateur/slug). Le workflow demande T4 x2, attend le verdict de Kaggle et affiche le lien vers le Notebook privé. Les sorties restent sur Kaggle ; le workflow ne les télécharge pas sur GitHub.
+Pour chaque nouveau rendu : ouvrir https://github.com/dbrckk/ugc-zero-credit/actions/workflows/kaggle-private-gpu.yml, cliquer Run workflow, donner son identifiant Kaggle et la référence du dataset privé (utilisateur/slug). Le workflow demande T4 x2, attend le verdict de Kaggle et affiche le lien vers le Notebook privé. Le workflow télécharge temporairement les résultats sur son runner éphémère, vérifie le SHA-256, les pistes et le décodage FFmpeg du vrai MP4, puis efface cette copie. Aucun artefact public n'est créé. Les originaux restent privés sur Kaggle.
 
 Le notebook doit pouvoir accéder au dataset privé. Si Kaggle refuse le GPU, le quota ou les téléchargements du modèle, le workflow échoue explicitement. Pas de génération payante ni de contournement des quotas.
 
@@ -57,6 +57,6 @@ Le script crée un dataset Kaggle **privé** en utilisant les données locales a
 - Les datasets et notebooks créés par le contrôleur sont privés. Si l'on fournit un dataset Kaggle déjà existant, c'est à son propriétaire de s'assurer qu'il est privé.
 - Les jetons ne sont jamais fournis en arguments de ligne de commande ni écrits dans le dépôt.
 - Un état COMPLETE annoncé par Kaggle ne prouve pas une génération MuseTalk réussie : vérifier le vrai fichier vidéo et son manifeste, puis les lèvres et la qualité de la voix.
-- Le workflow GitHub ne télécharge pas de vidéo dans un dépôt public. Le mode local peut récupérer les MP4 dans un dossier protégé.
+- Le workflow GitHub télécharge le MP4 uniquement dans son environnement temporaire de vérification, le contrôle puis le supprime. Il ne publie ni vidéo ni rapport en artefact public ; le mode local peut les conserver dans un dossier protégé.
 - Kaggle est soumis à des quotas et n'est pas un serveur permanent ; le workflow est déclenché volontairement, pas chaque jour.
 - Aucune exécution GPU réelle ne peut être revendiquée sans le compte Kaggle autorisé et des médias d'entrée consentis.
