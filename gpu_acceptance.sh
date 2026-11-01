@@ -42,11 +42,12 @@ output="$review/presenter_$name.mp4"
   --output "$output"
 "$py" - "$output" <<'PY'
 from pathlib import Path
-import hashlib, json, sys
+import json, sys
+from offline_presenter import digest
 video = Path(sys.argv[1])
 report = json.loads(video.with_suffix(".presenter.json").read_text(encoding="utf-8"))
 assert video.is_file() and video.stat().st_size > 1024
-assert report["sha256"] == hashlib.sha256(video.read_bytes()).hexdigest()
+assert report["sha256"] == digest(video)
 assert report["gpu_inference_executed"] is True and report["ffmpeg_full_decode"] is True
 assert report["reused_existing_narration"] is True
 assert report["publication_allowed_automatically"] is False
