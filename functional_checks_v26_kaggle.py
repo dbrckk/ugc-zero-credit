@@ -92,8 +92,13 @@ class KaggleOrchestrationTests(unittest.TestCase):
             output = root / "ugc-v25-results"
             output.mkdir()
             file = output / "presenter_abc.mp4"
-            # Test-only fixture, never advertised as a model output.
-            file.write_bytes(b"test-only-dummy-video" * 100)
+            # Real locally decoded H264/AAC test fixture, NOT MuseTalk inference.
+            subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+                            "-f", "lavfi", "-i", "testsrc2=s=320x512:r=25",
+                            "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=24000",
+                            "-t", "1.4", "-c:v", "libx264", "-preset", "ultrafast",
+                            "-c:a", "aac", "-shortest", str(file)],
+                           capture_output=True, check=True, timeout=75)
             report = output / "presenter_abc.presenter.json"
             metadata = {"sha256": hashlib.sha256(file.read_bytes()).hexdigest(),
                         "gpu_inference_executed": True,
