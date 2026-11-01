@@ -10,6 +10,7 @@ import argparse
 import hashlib
 import json
 import math
+from fractions import Fraction
 import os
 from pathlib import Path
 import re
@@ -33,6 +34,7 @@ MODEL_REQUIRED = (
     "models/face-parse-bisent/resnet18-5c106cde.pth",
 )
 IMAGE_FORMATS = frozenset({".png", ".jpg", ".jpeg"})
+VIDEO_FORMATS = frozenset({".mp4", ".mov", ".mkv"})
 
 
 def digest(path: Path) -> str:
@@ -249,8 +251,9 @@ def presenter(*, text: str, model: Path, image: Path, musetalk: Path,
     if image.is_symlink():
         raise ValueError("Lien symbolique de portrait interdit")
     image = image.expanduser().resolve(strict=True)
-    if image.suffix.lower() not in IMAGE_FORMATS or not image.is_file():
-        raise ValueError("MuseTalk image : fournir un PNG/JPEG de portrait autorisé")
+    suffix = image.suffix.lower()
+    if suffix not in IMAGE_FORMATS | VIDEO_FORMATS or not image.is_file():
+        raise ValueError("MuseTalk : fournir un portrait PNG/JPEG ou un clip MP4/MOV/MKV autorisé")
     # Never resolve a destination before checking whether it is a symlink.
     # A dangling link could otherwise redirect a generated commercial asset.
     out = output.expanduser().absolute()
@@ -276,8 +279,7 @@ def presenter(*, text: str, model: Path, image: Path, musetalk: Path,
         tmp = Path(tmpname).resolve()
         if not SAFE_UPSTREAM_PATH.fullmatch(str(tmp)):
             raise ValueError("Chemin temporaire non compatible avec MuseTalk")
-        picture = tmp / ("avatar" + image.suffix.lower())
-        shutil.copyfile(image, picture)
+        picture = tmp / ("avatar" + suffix)
         sound = tmp / "voice.wav"
         if existing_narration is None:
             voice_meta = synthesize(text, model, sound, voice_license_ref=voice_license_ref,
@@ -288,6 +290,12 @@ def presenter(*, text: str, model: Path, image: Path, musetalk: Path,
                           "model_sha256": source_voice["model_sha256"],
                           "wav_sha256": source_voice["sha256"],
                           "language": source_voice["language"]}
+        if suffix in VIDEO_FORMATS:
+            picture = tmp / "avatar.mp4"
+            source_meta = prepare_presenter_video(image, picture, voice_seconds=voice_meta["duration"])
+        else:
+            shutil.copyfile(image, picture)
+            source_meta = {"source_type": "still_portrait", "source_audio_replaced_with_piper": False}
         yaml = tmp / "inference.yaml"
         yaml.write_text(f"ugc_presenter:\n  video_path: {picture}\n  audio_path: {sound}\n  result_name: presenter.mp4\n", encoding="utf-8")
         render_dir = tmp / "musetalk_result"
@@ -332,6 +340,7 @@ def presenter(*, text: str, model: Path, image: Path, musetalk: Path,
             "backend": "MuseTalk 1.5 local GPU + Piper CPU",
             "sha256": digest(candidate),
             "portrait_sha256": digest(image),
+            **source_meta,
             "voice_model_sha256": voice_meta["model_sha256"],
             "voice_license_ref": voice_license_ref,
             "portrait_rights_ref": image_rights_ref,
