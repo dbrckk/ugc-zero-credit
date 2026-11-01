@@ -27,6 +27,8 @@ nvidia-smi -L >/dev/null 2>&1 || fail "GPU NVIDIA non accessible."
 if [[ "$mode" == --install ]]; then
   command -v apt-get >/dev/null && command -v python3 >/dev/null || fail "Debian/Ubuntu et Python 3 requis."
   apt=""; if (( EUID != 0 )); then command -v sudo >/dev/null || fail "sudo requis."; apt=sudo; fi
+  free_kib="$(df -Pk "$home" | awk 'NR==2 {print $4}')"
+  [[ "$free_kib" =~ ^[0-9]+$ ]] && (( free_kib >= 20*1024*1024 )) || fail "20 Gio de disque disponibles requis pour PyTorch CUDA, modèles et environnement."
   $apt apt-get update -qq
   $apt apt-get install -y --no-install-recommends git ca-certificates curl ffmpeg python3-venv python3-pip libgl1 libglib2.0-0 espeak-ng
   if command -v uv >/dev/null; then
@@ -37,8 +39,8 @@ if [[ "$mode" == --install ]]; then
     uv="$home/.ugc-uv-bootstrap/bin/uv"
   fi
   "$uv" python install 3.10 3.11
-  "$uv" venv --seed --python 3.10 "$gpu"
-  "$uv" venv --seed --python 3.11 "$studio"
+  if [[ ! -x "$gpu/bin/python" ]]; then "$uv" venv --seed --python 3.10 "$gpu"; fi
+  if [[ ! -x "$studio/bin/python" ]]; then "$uv" venv --seed --python 3.11 "$studio"; fi
   if [[ -e "$mt" ]]; then
     [[ -d "$mt/.git" ]] || fail "Dossier MuseTalk existant non Git."
     [[ "$(git -C "$mt" remote get-url origin)" == "https://github.com/TMElyralab/MuseTalk.git" ]] || fail "Dépôt MuseTalk inattendu."
