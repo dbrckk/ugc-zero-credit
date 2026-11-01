@@ -1,6 +1,6 @@
 # UGC Zero Credit
 
-**Studio UGC TikTok, Reels et YouTube Shorts — V24 (préparation GPU P0).** Assemble et contrôle localement des vidéos d'influenceuses IA **déjà existantes**, en conservant leur voix native. Aucune API de génération payante, aucun jeton d'inférence consommé.
+**Studio UGC TikTok, Reels et YouTube Shorts — V25 (Kaggle T4 GPU pour validation P0).** Assemble et contrôle localement des vidéos d'influenceuses IA **déjà existantes**, en conservant leur voix native. Aucune API de génération payante, aucun jeton d'inférence consommé.
 
 ## Studio Android, rendu V10 et génération vocale locale V11
 
@@ -37,6 +37,12 @@ La V15 réduit la taille de la mention obligatoire sur les aperçus 360 × 640 p
 ## V16 — composition éditoriale des Shorts
 
 Titres de 1–4 lignes adaptés aux écrans mobiles, fond flouté sobre, cadre discret autour du produit, repère de séquence et variations légères de zoom/panoramique. La photo n'est pas recadrée et les déclarations publicitaires restent affichées. Les tests construisent de vrais MP4 et sauvegardent des captures PNG de contrôle ; voir [PROCESS_V16.md](PROCESS_V16.md).
+
+## V25 — essai sur GPU Kaggle T4 x2 sans crédits payants
+
+Un Notebook Kaggle **privé** est disponible dans [kaggle/ugc_musetalk_gpu.ipynb](kaggle/ugc_musetalk_gpu.ipynb). Il utilise le nouveau moteur [kaggle_musetalk.py](kaggle_musetalk.py) pour valider une vraie vidéo source autorisée, installer MuseTalk 1.5 dans un environnement isolé, synthétiser la voix française/anglaise Piper, générer un vrai MP4 MuseTalk sur GPU NVIDIA et produire un rapport. Les modèles lourds restent dans l'espace temporaire Kaggle et la sortie dans /kaggle/working.
+
+**Les P100 Kaggle ont été retirés le 15 septembre 2026 : utiliser GPU T4 ×2.** Quotas limités, pas de serveur GPU permanent. L'exécution réelle Kaggle nécessite un compte GPU et des médias autorisés ; elle n'a pas été effectuée par GitHub Actions. Guide Android et plan : [PROCESS_V25_KAGGLE.md](PROCESS_V25_KAGGLE.md).
 
 ## V24 — installation GPU NVIDIA sécurisée et reproductible
 
