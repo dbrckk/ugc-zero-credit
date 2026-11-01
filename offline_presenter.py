@@ -269,7 +269,7 @@ def prepare_presenter_video(source: Path, destination: Path, *, voice_seconds: f
     target_width = max(2, int(width * scale) // 2 * 2)
     target_height = max(2, int(height * scale) // 2 * 2)
     # MuseTalk cycles source frames when narration is longer than footage.
-    used_seconds = min(duration, voice_seconds, 30.)
+    used_seconds = min(duration, voice_seconds, 15.)
     try:
         subprocess.run(
             ["ffmpeg", "-hide_banner", "-nostdin", "-v", "error", "-y",
@@ -297,7 +297,7 @@ def prepare_presenter_video(source: Path, destination: Path, *, voice_seconds: f
             "source_fps": round(fps, 3), "source_width": width, "source_height": height,
             "prepared_fps": 25, "prepared_width": target_width,
             "prepared_height": target_height, "prepared_seconds": round(used_seconds, 3),
-            "source_frames": int(stream["nb_frames"]),
+            "prepared_frame_count": int(stream["nb_frames"]),
             "source_audio_replaced_with_piper": True}
 
 
