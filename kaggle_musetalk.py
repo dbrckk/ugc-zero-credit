@@ -7,7 +7,6 @@ Installs into /kaggle/temp; only user-approved outputs enter /kaggle/working.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import math
 import os
@@ -16,7 +15,6 @@ import secrets
 import shutil
 import subprocess
 import sys
-import tempfile
 
 from offline_presenter import clean_text, digest, required_reference
 
@@ -60,8 +58,10 @@ def assets(input_root: Path) -> dict:
     if language not in LANGUAGES:
         raise ValueError("language.txt doit contenir exactement fr ou en")
     script = clean_text(script_file.read_text(encoding="utf-8-sig"))
+    if len(script) > 350:
+        raise ValueError("Script de publicité trop long : 350 caractères maximum pour le premier essai Kaggle")
     rights = required_reference(rights_file.read_text(encoding="utf-8-sig"), "Droits et consentement du sujet")
-    if not 8 <= len(rights) <= 500 or "\n" in rights:
+    if not 8 <= len(rights) <= 500 or "\n" in rights or "\r" in rights:
         raise ValueError("Une référence de droits explicite, sur une seule ligne (8–500 caractères), est requise")
     if video.stat().st_size > 120 * 1024 * 1024:
         raise ValueError("Clip source > 120 Mo : utiliser un clip plus court")
