@@ -25,6 +25,7 @@ import tempfile
 import time
 
 from kaggle_musetalk import assets
+from offline_presenter import clean_text, required_reference
 
 REF = re.compile(r"^[a-zA-Z0-9_-]{2,40}/[a-zA-Z0-9_-]{3,50}$")
 SLUG = re.compile(r"^[a-z][a-z0-9-]{2,49}$")
@@ -178,6 +179,10 @@ def main(argv=None):
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--dataset", help="Dataset Kaggle privé préexistant, format utilisateur/slug")
     group.add_argument("--media-dir", type=Path, help="Répertoire local des quatre médias autorisés")
+    group.add_argument("--video", type=Path, help="Clip source local : génère automatiquement le dataset privé")
+    parser.add_argument("--text", help="Narration à prononcer (avec --video)")
+    parser.add_argument("--language", choices=["fr", "en"], help="Langue de la narration (avec --video)")
+    parser.add_argument("--rights", help="Référence d’autorisation du clip (avec --video)")
     parser.add_argument("--kernel-slug", default="ugc-zero-credit-private")
     parser.add_argument("--wait-minutes", type=int, default=120)
     parser.add_argument("--poll-seconds", type=int, default=60)
@@ -188,6 +193,11 @@ def main(argv=None):
         parser.error("Identifiant utilisateur Kaggle invalide")
     if not 5 <= args.wait_minutes <= 240 or not 10 <= args.poll_seconds <= 120:
         parser.error("Durée de suivi/polling invalide")
+    if args.video:
+        if not args.text or not args.language or not args.rights:
+            parser.error("--video nécessite aussi --text, --language et --rights")
+        clean_text(args.text)
+        required_reference(args.rights, "Autorisation du portrait")
     if args.dataset:
         dataset = ref(args.dataset, "Dataset Kaggle")
         # Fail closed on cross-user datasets: anonymous public datasets are
@@ -197,7 +207,18 @@ def main(argv=None):
     check_auth()
     with tempfile.TemporaryDirectory(prefix="ugc-kaggle-private-") as temp:
         workspace = Path(temp)
-        if args.media_dir:
+        if args.video:
+            media = workspace / "media-from-phone"
+            media.mkdir()
+            source = args.video.expanduser()
+            if source.is_symlink() or not source.is_file() or source.suffix.lower() not in {".mp4", ".mov", ".mkv"}:
+                raise ValueError("Fichier vidéo absent, symbolique ou format non pris en charge")
+            shutil.copyfile(source, media / ("presenter" + source.suffix.lower()))
+            (media / "script.txt").write_text(args.text, encoding="utf-8")
+            (media / "language.txt").write_text(args.language, encoding="utf-8")
+            (media / "portrait_rights.txt").write_text(args.rights, encoding="utf-8")
+            dataset = private_dataset_from_media(media, user, workspace)
+        elif args.media_dir:
             dataset = private_dataset_from_media(args.media_dir, user, workspace)
         kernel = notebook_kernel(workspace / "notebook",
                                  user=user, slug=args.kernel_slug, dataset=dataset)
