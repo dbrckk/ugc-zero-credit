@@ -645,6 +645,10 @@ class Handler(BaseHTTPRequestHandler):
             raise ValueError("Portrait MuseTalk : JPEG ou PNG uniquement")
         inspect_photos([photo])
         voice_info = inspect_narration(wav, voice_item.get("voice_sha256"))
+        if (len(indexed) >= MAX_FILES
+                or sum(item.get("bytes", 0) for item in indexed.values()) >= MAX_PROJECT_BYTES
+                or shutil.disk_usage(project).free < MIN_FREE_BYTES + 64 * 1024 * 1024):
+            return self.error_response(409, "Quota du projet ou réserve disque insuffisant pour MuseTalk")
         if not (project / "media").is_dir() or (project / "media").is_symlink():
             raise ValueError("Dossier média invalide")
         # Fail before admission; a CPU-only Docker studio must not queue fake GPU work.
