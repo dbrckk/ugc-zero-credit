@@ -1,7 +1,7 @@
 name: V14 real narrated photo Shorts — local CPU Piper plus FFmpeg
 on:
   push:
-    branches: [feat/v14-narrated-photo-shorts, feat/v15-short-visual-polish, feat/v16-visual-storytelling, fix/v17-output-symlink-safety, feat/v18-animated-headline-progress, feat/v19-cinematic-photo-stage, feat/v20-audio-aware-scene-cuts, feat/v21-private-musetalk-android, feat/v22-presenter-readiness-av-qa, feat/v23-moving-presenter-video]
+    branches: [feat/v14-narrated-photo-shorts, feat/v15-short-visual-polish, feat/v16-visual-storytelling, fix/v17-output-symlink-safety, feat/v18-animated-headline-progress, feat/v19-cinematic-photo-stage, feat/v20-audio-aware-scene-cuts, feat/v21-private-musetalk-android, feat/v22-presenter-readiness-av-qa, feat/v23-moving-presenter-video, feat/v24-gpu-host-bootstrap]
   workflow_dispatch:
 permissions:
   contents: read
@@ -14,6 +14,21 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Validate GPU bootstrap scripts without inventing CUDA availability
+        run: |
+          bash -n gpu_host.sh gpu_acceptance.sh
+          python -m compileall -q gpu_fetch_weights.py offline_presenter.py studio_web.py
+          if bash gpu_host.sh --doctor >gpu-doctor.log 2>&1; then
+            echo 'ERROR: CPU runner falsely reported NVIDIA MuseTalk readiness'
+            exit 1
+          fi
+          grep -q 'ERREUR GPU' gpu-doctor.log
+          if bash gpu_acceptance.sh >gpu-acceptance.log 2>&1; then
+            echo 'ERROR: GPU acceptance unexpectedly succeeded without authorized media'
+            exit 1
+          fi
+          grep -q 'Utilisation :' gpu-acceptance.log
+          rm -f gpu-doctor.log gpu-acceptance.log
       - name: Install real FFmpeg, font and pinned Piper CPU
         run: |
           sudo apt-get update -qq
@@ -28,7 +43,7 @@ jobs:
         env:
           UGC_TEST_PIPER_MODEL: ${{ runner.temp }}/ugc-voices/fr_FR-siwis-medium.onnx
           UGC_TEST_PIPER_MODEL_EN: ${{ runner.temp }}/ugc-voices/en_US-lessac-medium.onnx
-          UGC_V16_ARTIFACTS_DIR: ${{ runner.temp }}/ugc-v23-frames
+          UGC_V16_ARTIFACTS_DIR: ${{ runner.temp }}/ugc-v24-frames
         run: |
           python -m compileall -q studio_web.py narrated_short.py offline_presenter.py speech_scene_timing.py functional_checks_v14.py
           node --check studio_web/studio.js
@@ -41,8 +56,8 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ugc-v23-moving-presenter-frames
-          path: ${{ runner.temp }}/ugc-v23-frames/*.png
+          name: ugc-v24-gpu-boot-frames
+          path: ${{ runner.temp }}/ugc-v24-frames/*.png
           if-no-files-found: ignore
           retention-days: 3
       - name: Build real private Docker studio (two ONNX voice models)
