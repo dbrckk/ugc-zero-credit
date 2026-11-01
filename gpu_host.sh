@@ -101,7 +101,19 @@ EOF
   systemctl --user daemon-reload
   systemctl --user enable --now ugc-zero-credit-gpu.service
   systemctl --user is-active --quiet ugc-zero-credit-gpu.service || fail "Service GPU non actif."
-  echo "Serveur privé démarré sur 127.0.0.1:8788. Aucun port public."
+  # A running process is not proof of a working private HTTP studio.
+  [[ -f "$keyfile" && ! -L "$keyfile" ]] || fail "Jeton GPU privé absent après démarrage."
+  export UGC_STUDIO_TOKEN="$(tr -d '\r\n' < "$keyfile")"
+  ready=0
+  for attempt in $(seq 1 25); do
+    if python3 -c 'import json,os,urllib.request; req=urllib.request.Request("http://127.0.0.1:8788/api/health",headers={"Authorization":"Bearer "+os.environ["UGC_STUDIO_TOKEN"]}); d=json.load(urllib.request.urlopen(req,timeout=4)); assert d["ok"] and d["presenter_gpu_configured"] and "fr" in d["voice_languages"] and "en" in d["voice_languages"]' >/dev/null 2>&1; then
+      ready=1
+      break
+    fi
+    sleep 2
+  done
+  [[ "$ready" == 1 ]] || fail "Service activé mais endpoint privé HTTP ou voix FR/EN indisponibles ; consulter journalctl --user -u ugc-zero-credit-gpu."
+  echo "HTTP privé vérifié : 127.0.0.1:8788, voix FR/EN et pont GPU configurés."
   exit 0
 fi
 [[ -f "$keyfile" && ! -L "$keyfile" ]] || fail "Jeton GPU absent."
