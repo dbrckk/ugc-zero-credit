@@ -30,6 +30,9 @@ from offline_presenter import clean_text, required_reference
 REF = re.compile(r"^[a-zA-Z0-9_-]{2,40}/[a-zA-Z0-9_-]{3,50}$")
 SLUG = re.compile(r"^[a-z][a-z0-9-]{2,49}$")
 STATUS = re.compile(r"KernelWorkerStatus\.(QUEUED|RUNNING|COMPLETE|ERROR|CANCEL_REQUESTED|CANCEL_ACKNOWLEDGED|NEW_SCRIPT)")
+# Official Kaggle CLI prints the version assigned by the server on a push.
+# Pin status/output to that exact version: latest may refer to a different run.
+PUSH_VERSION = re.compile(r"Kernel version\s+(\d+)\s+successfully\s+pushed\b")
 REPO = Path(__file__).resolve().parent
 NOTEBOOK = REPO / "kaggle" / "ugc_musetalk_gpu.ipynb"
 KAGGLE_ID = "NvidiaTeslaT4"
@@ -117,6 +120,19 @@ def notebook_kernel(folder: Path, *, user: str, slug: str, dataset: str) -> str:
     (folder / "kernel-metadata.json").write_text(
         json.dumps(config, indent=2) + "\n", encoding="utf-8")
     return kernel_ref
+
+
+def pushed_version(output: str, kernel: str) -> str:
+    """Accept only a confirmed run version issued by the Kaggle server.
+
+    Never fall back to /latest, which can silently fetch an unrelated older
+    MP4 from a previous successful version after a failed or racing push.
+    """
+    matches = PUSH_VERSION.findall(output)
+    if len(matches) != 1 or int(matches[0]) <= 0:
+        raise RuntimeError("Kaggle n'a pas confirmé la version exécutée. "
+                           "Vérifier le notebook avant de soumettre un nouveau calcul GPU.")
+    return kernel + "/" + matches[0]
 
 
 def status_value(output: str) -> str:
@@ -234,10 +250,12 @@ def main(argv=None):
         kernel = notebook_kernel(workspace / "notebook",
                                  user=user, slug=args.kernel_slug, dataset=dataset)
         print("Création du Notebook privé, GPU T4 x2 :", kernel, flush=True)
-        command(["kernels", "push", "-p", str(workspace / "notebook"),
-                 "--accelerator", KAGGLE_ID], timeout=600)
-        print("Notebook : https://www.kaggle.com/code/" + kernel, flush=True)
-        wait(kernel, minutes=args.wait_minutes, interval=args.poll_seconds)
+        push_stdout = command(["kernels", "push", "-p", str(workspace / "notebook"),
+                               "--accelerator", KAGGLE_ID], timeout=600)
+        submitted = pushed_version(push_stdout, kernel)
+        print("Notebook : https://www.kaggle.com/code/" + submitted, flush=True)
+        print("Suivi de la version exacte, jamais d'une ancienne réussite.", flush=True)
+        wait(submitted, minutes=args.wait_minutes, interval=args.poll_seconds)
         # COMPLETE is never enough: verify the actual downloaded MP4 even when
         # invoked from GitHub Actions. Runner copies are ephemeral and never
         # published as artifacts. Kaggle retains the original privately.
@@ -250,7 +268,7 @@ def main(argv=None):
             dest = workspace / "ephemeral-result"
             dest.mkdir()
         try:
-            command(["kernels", "output", kernel, "-p", str(dest)], timeout=900)
+            command(["kernels", "output", submitted, "-p", str(dest)], timeout=900)
             validated = check_results(dest)
         except Exception:
             print("Sortie non validée ; ne pas diffuser les fichiers.", file=sys.stderr)

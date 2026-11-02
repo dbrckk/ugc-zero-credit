@@ -71,5 +71,5 @@ jobs:
         shell: bash
         run: |
           echo "Le notebook et ses MP4 restent privés sur Kaggle."
-          echo "https://www.kaggle.com/code/$KAGGLE_USER/$KERNEL_SLUG"
+          echo "Le lien vers la version exacte figure dans l’étape précédente."
           echo "Le MP4 est contrôlé temporairement sur le runner puis effacé ; aucun artefact public."

@@ -38,6 +38,10 @@ La V15 réduit la taille de la mention obligatoire sur les aperçus 360 × 640 p
 
 Titres de 1–4 lignes adaptés aux écrans mobiles, fond flouté sobre, cadre discret autour du produit, repère de séquence et variations légères de zoom/panoramique. La photo n'est pas recadrée et les déclarations publicitaires restent affichées. Les tests construisent de vrais MP4 et sauvegardent des captures PNG de contrôle ; voir [PROCESS_V16.md](PROCESS_V16.md).
 
+## V27 — preuve d'origine des vidéos Kaggle
+
+Après chaque soumission du notebook, l'automatisation enregistre le **numéro de version renvoyé par Kaggle** puis suit et télécharge exclusivement ce run. Elle n'accepte jamais le MP4 d'une ancienne version (y compris si Kaggle retourne un résultat « COMPLETE » précédent). Un numéro absent ou ambigu bloque le résultat au lieu de le déclarer réussi. Voir [PROCESS_V27.md](PROCESS_V27.md).
+
 ## V26 — Kaggle automatisé sans préparation de Notebook à la main
 
 Le [workflow GitHub Actions Kaggle privé](.github/workflows/kaggle-private-gpu.yml) crée le notebook, sélectionne le GPU T4 ×2, lance et surveille le calcul depuis le téléphone. Il requiert un seul secret GitHub KAGGLE_API_TOKEN et un dataset Kaggle privé déjà préparé : **aucun MP4 ni jeton dans les artifacts d'un dépôt public**.

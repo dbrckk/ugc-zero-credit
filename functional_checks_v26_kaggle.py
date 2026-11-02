@@ -23,6 +23,44 @@ class KaggleOrchestrationTests(unittest.TestCase):
             with self.subTest(value=source), self.assertRaises(ValueError):
                 ka.status_value(source)
 
+    def test_push_version_is_confirmed_and_never_uses_latest(self):
+        kernel = "authorized-user/ugc-zero-credit-private"
+        self.assertEqual(
+            ka.pushed_version(
+                "Kernel version 17 successfully pushed.  Please check progress at https://www.kaggle.com/code/authorized-user/ugc-zero-credit-private",
+                kernel),
+            kernel + "/17",
+        )
+        for output in (
+            "", "Kernel version successfully pushed",
+            "Kernel version 0 successfully pushed",
+            "Kernel version 17 saved without running",
+            "Kernel version 17 successfully pushed; Kernel version 18 successfully pushed",
+        ):
+            with self.subTest(output=output), self.assertRaises(RuntimeError):
+                ka.pushed_version(output, kernel)
+
+    def test_orchestrator_tracks_only_submitted_version(self):
+        calls = []
+        def fake_cli(args, *, timeout=180):
+            calls.append(args)
+            if args[:2] == ["kernels", "push"]:
+                return "Kernel version 42 successfully pushed.  Please check progress at https://www.kaggle.com/code/owner/notebook"
+            if args[:2] == ["kernels", "output"]:
+                return "Downloaded exact version 42"
+            raise AssertionError("Unexpected network operation " + str(args))
+        with mock.patch.dict(os.environ, {"KAGGLE_API_TOKEN": "KGAT_sensitive_test_token_123456"}), \
+             mock.patch.object(ka, "check_auth"), \
+             mock.patch.object(ka, "command", side_effect=fake_cli), \
+             mock.patch.object(ka, "wait") as waited, \
+             mock.patch.object(ka, "check_results", return_value=[Path("/private/verified.mp4")]):
+            ka.main(["--user", "authorized-user", "--dataset", "authorized-user/private-data",
+                     "--wait-minutes", "5", "--poll-seconds", "10"])
+        expected = "authorized-user/ugc-zero-credit-private/42"
+        waited.assert_called_once_with(expected, minutes=5, interval=10)
+        self.assertEqual(calls[-1][:3], ["kernels", "output", expected])
+        self.assertFalse(any("KGAT_sensitive_test_token_123456" in str(c) for c in calls))
+
     def test_private_kernel_metadata_and_rejections(self):
         with tempfile.TemporaryDirectory() as tmp:
             folder = Path(tmp) / "kernel"
