@@ -1,7 +1,7 @@
 name: V14 real narrated photo Shorts — local CPU Piper plus FFmpeg
 on:
   push:
-    branches: [feat/v14-narrated-photo-shorts, feat/v15-short-visual-polish, feat/v16-visual-storytelling, fix/v17-output-symlink-safety, feat/v18-animated-headline-progress, feat/v19-cinematic-photo-stage, feat/v20-audio-aware-scene-cuts, feat/v21-private-musetalk-android, feat/v22-presenter-readiness-av-qa, feat/v23-moving-presenter-video, feat/v24-gpu-host-bootstrap, feat/v25-kaggle-gpu-batch, feat/v26-kaggle-one-command-automation]
+    branches: [feat/v14-narrated-photo-shorts, feat/v15-short-visual-polish, feat/v16-visual-storytelling, fix/v17-output-symlink-safety, feat/v18-animated-headline-progress, feat/v19-cinematic-photo-stage, feat/v20-audio-aware-scene-cuts, feat/v21-private-musetalk-android, feat/v22-presenter-readiness-av-qa, feat/v23-moving-presenter-video, feat/v24-gpu-host-bootstrap, feat/v25-kaggle-gpu-batch, feat/v26-kaggle-one-command-automation, fix/v27-kaggle-exact-run-artifacts]
   workflow_dispatch:
 permissions:
   contents: read
